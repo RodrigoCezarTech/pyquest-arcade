@@ -978,11 +978,31 @@
             writeCachedRoom(normalizedRoom);
             renderRoomPlayersUI(normalizedRoom);
             renderLiveRoomScoreboard(normalizedRoom);
+            renderResultRoomLeaderboard(normalizedRoom);
 
             const joinVisible = !document.getElementById("screen-join")?.classList.contains("hidden");
             const gameVisible = !document.getElementById("screen-game")?.classList.contains("hidden");
-            if (normalizedRoom.status === "playing" && joinVisible && !gameVisible) {
+            if (joinVisible && normalizedRoom.status === "playing" && !gameVisible) {
                 beginRoomGameplay(normalizedRoom);
+            }
+        }
+
+        function renderResultRoomLeaderboard(room) {
+            const resultSec = document.getElementById("screen-result");
+            if (!resultSec || resultSec.classList.contains("hidden")) return;
+            if (currentMode !== "room" || !currentRoomPin) return;
+            const lbTitle = document.getElementById("leaderboard-title");
+            const lbRows = document.getElementById("leaderboard-rows");
+            const players = Array.isArray(room?.players) ? [...room.players] : [];
+            if (!players.length) return;
+            players.sort((a, b) => Number(b.score || 0) - Number(a.score || 0));
+            if (lbTitle) lbTitle.textContent = `Placar da Sala ${currentRoomPin}`;
+            if (lbRows) {
+                lbRows.innerHTML = players.map((p, i) => {
+                    const isMe = p.id === getLocalPlayerId();
+                    const statusTag = p.status === "finished" ? "✓ Concluiu" : "Jogando...";
+                    return `<div class="flex items-center justify-between px-3 py-2 rounded-xl bg-slate-950/80 border ${isMe ? "border-indigo-400/50" : "border-slate-800"}"><span class="font-bold text-slate-200">#${i + 1} ${escapeHtml(p.name || "Jogador")} <span class="text-xs text-slate-400 font-normal">(${statusTag})</span></span><span class="font-mono font-extrabold text-indigo-300">${Number(p.score || 0)} pts</span></div>`;
+                }).join("");
             }
         }
 
@@ -994,8 +1014,7 @@
                 }
             };
         }
-
-        function getCurrentPlayerSnapshot() {
+        function getCurrentPlayerSnapshot(forcedStatus = null) {
             const nameInput = document.getElementById("player-name");
             const playerName = (nameInput && nameInput.value.trim()) || (userAvatar && userAvatar.name) || "Jogador Py";
             return {
@@ -1004,6 +1023,7 @@
                 score: gameState ? Number(gameState.score || 0) : 0,
                 correct: gameState ? Number(gameState.correct || 0) : 0,
                 streak: gameState ? Number(gameState.bestStreak || gameState.streak || 0) : 0,
+                status: forcedStatus || (gameState && gameState.finished ? "finished" : "playing"),
                 avatar: userAvatar ? { ...userAvatar, name: playerName } : { style: "bot", theme: "indigo", gear: "antenna", name: playerName },
                 updated_at: new Date().toISOString()
             };
@@ -1159,7 +1179,7 @@
             const cleanPin = normalizePin(pin);
             if (!cleanPin) return null;
 
-            const me = getCurrentPlayerSnapshot();
+            const me = getCurrentPlayerSnapshot(forcedStatus);
             const existing = readCachedRoom(cleanPin) || currentRoomData || {
                 pin: cleanPin,
                 status: "waiting",
@@ -1786,6 +1806,7 @@
                 timerInterval = null;
             }
             if (!gameState) return;
+            gameState.finished = true;
             SoundFX.finish();
 
             const total = gameState.deck.length || 1;
@@ -1825,11 +1846,7 @@
             if (streakEl) streakEl.textContent = `${gameState.bestStreak}x`;
 
             if (currentMode === "room" && currentRoomData && Array.isArray(currentRoomData.players) && currentRoomData.players.length > 0) {
-                if (lbTitle) lbTitle.textContent = `Placar da Sala ${currentRoomPin || ""}`;
-                const sortedRoom = [...currentRoomData.players].sort((a, b) => Number(b.score || 0) - Number(a.score || 0));
-                if (lbRows) {
-                    lbRows.innerHTML = sortedRoom.map((p, i) => `<div class="flex items-center justify-between px-3 py-2 rounded-xl bg-slate-950/80 border border-slate-800"><span class="font-bold text-slate-200">#${i + 1} ${escapeHtml(p.name || "Jogador")}</span><span class="font-mono font-extrabold text-indigo-300">${Number(p.score || 0)} pts</span></div>`).join("");
-                }
+                renderResultRoomLeaderboard(currentRoomData);
             } else {
                 if (lbTitle) lbTitle.textContent = "Top 8 Placar Local";
                 if (lbRows) {
