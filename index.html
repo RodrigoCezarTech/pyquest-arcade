@@ -239,7 +239,7 @@
             </button>
         </section>
 
-        <!-- Tela de Jogo (Full Viewport, Sem Rolagem para Próxima Missão) -->
+        <!-- Tela de Jogo -->
         <section id="screen-game" class="hidden flex-1 flex flex-col justify-between gap-2.5 min-h-0">
             <!-- HUD Superior -->
             <div class="arcade-card rounded-2xl px-4 py-2.5 sm:px-5 sm:py-3 flex flex-wrap items-center justify-between gap-2 shrink-0">
@@ -257,7 +257,7 @@
                     </div>
                 </div>
 
-                <!-- Placar ao Vivo da Sala (quando em modo sala) -->
+                <!-- Placar ao Vivo da Sala -->
                 <div id="hud-live-scoreboard" class="hidden flex-wrap items-center gap-1.5 max-w-md"></div>
 
                 <div class="flex items-center gap-3 sm:gap-5">
@@ -393,31 +393,657 @@
         const SUPABASE_ANON_KEY = "sb_publishable_fkj8IxaAG2yUqKumWV3_Xw_eJgEENL8";
         const SUPABASE_TABLE = "pyquest_rooms";
 
+        const OPTION_STYLES = [
+            "bg-rose-600/90 hover:bg-rose-500 border-rose-400/40 text-white",
+            "bg-sky-600/90 hover:bg-sky-500 border-sky-400/40 text-white",
+            "bg-amber-600/90 hover:bg-amber-500 border-amber-400/40 text-white",
+            "bg-emerald-600/90 hover:bg-emerald-500 border-emerald-400/40 text-white"
+        ];
+        const OPTION_LABELS = ["A", "B", "C", "D"];
+        const LEADERBOARD_KEY = "pyquest_arcade_leaderboard_v1";
+        const AVATAR_KEY = "pyquest_arcade_avatar_v1";
+
         let supabaseClient = null;
         let roomChannel = null;
+        let roomPollingTimer = null;
+        let realtimeBlockedInSandbox = false;
         let currentRoomData = null;
-        const localPlayerId = (() => {
-            const key = "pyquest_client_id_v1";
-            try {
-                let id = sessionStorage.getItem(key);
-                if (!id) {
-                    id = "p_" + Math.random().toString(36).slice(2, 10);
-                    sessionStorage.setItem(key, id);
-                }
-                return id;
-            } catch (_) {
-                return "p_" + Math.random().toString(36).slice(2, 10);
+
+        let currentMode = "solo";
+        let currentRoomPin = null;
+        let timerInterval = null;
+        let soundEnabled = true;
+        let gameState = null;
+        let userAvatar = {
+            style: "bot",
+            theme: "indigo",
+            gear: "antenna",
+            name: "Jogador Py"
+        };
+
+        const CASES = [
+            {
+                id: 1,
+                character: "Terturiano",
+                topic: "if / else",
+                title: "Parada Cardíaca com Adrenalina",
+                story: "Terturiano monitora um paciente com batimentos zerados (bpm == 0). Se não houver pulso, ele precisa aplicar 'adrenalina' imediatamente!",
+                code: "bpm = 0\nif bpm == 0:\n    acao = ___\nelse:\n    acao = \"monitorar\"",
+                options: ["\"adrenalina\"", "adrenalina()", "print(\"adrenalina\")", "bpm = \"adrenalina\""],
+                answer: 0,
+                hint: "Quando bpm == 0, a resposta certa é uma string entre aspas com o nome do medicamento.",
+                explanation: "Como a condição verifica bpm == 0, atribuímos a string 'adrenalina' à variável acao."
+            },
+            {
+                id: 2,
+                character: "Alípio",
+                topic: "else",
+                title: "Alípio e o Guarda-Chuva",
+                story: "Alípio olhou para o céu: está chovendo! Se chover, ele leva 'guarda-chuva'; senão (else), leva 'óculos_escuros'.",
+                code: "chovendo = True\nif chovendo:\n    item = \"guarda-chuva\"\n___:\n    item = \"oculos_escuros\"",
+                options: ["else", "elif", "senao", "default"],
+                answer: 0,
+                hint: "A própria história já cita a palavra em inglês para 'senão' quando o if não executa.",
+                explanation: "Em Python, o bloco alternativo quando o if é falso usa a palavra reservada else:."
+            },
+            {
+                id: 3,
+                character: "Tibúrcio",
+                topic: "read_json",
+                title: "Tibúrcio precisa ler um arquivo JSON",
+                story: "Tibúrcio recebeu o arquivo 'dados_tiburcio.json' estruturado em JSON. Qual comando do pandas lê JSON corretamente?",
+                data: [
+                    { chave: "analista", valor: "\"Tibúrcio\"", tipo: "str" },
+                    { chave: "registros", valor: "1420", tipo: "int" },
+                    { chave: "valido", valor: "true", tipo: "bool" }
+                ],
+                code: "import pandas as pd\ncaminho = \"dados_tiburcio.json\"\ndf_tiburcio = ___ (caminho)",
+                options: ["pd.read_json", "pd.read_csv", "pd.open_json", "json.read_csv"],
+                answer: 0,
+                hint: "O arquivo termina em .json e o prefixo do pandas é pd.read_...",
+                explanation: "Para ler arquivos JSON com pandas, usamos pd.read_json(caminho)."
+            },
+            {
+                id: 4,
+                character: "Amnésio",
+                topic: "read_csv",
+                title: "Amnésio precisa estruturar os dados CSV",
+                story: "Amnésio encontrou uma tabela separada por vírgulas ('inventario_amnesio.csv') e quer carregá-la em um DataFrame estruturado df_amnesio.",
+                data: [
+                    { id: "101", setor: "Norte", qtd: "48" },
+                    { id: "102", setor: "Sul", qtd: "95" },
+                    { id: "103", setor: "Leste", qtd: "72" }
+                ],
+                code: "import pandas as pd\narquivo = \"inventario_amnesio.csv\"\ndf_amnesio = ___ (arquivo)",
+                options: ["pd.read_csv", "pd.read_json", "pd.struct_csv", "csv.dataframe"],
+                answer: 0,
+                hint: "Qual função do pandas lê arquivos com extensão .csv para criar um DataFrame?",
+                explanation: "O comando pd.read_csv(arquivo) lê dados separados por vírgula e os estrutura em DataFrame."
+            },
+            {
+                id: 5,
+                character: "Tibúrcio",
+                topic: "df_.head()",
+                title: "Inspecionando as 5 Primeiras Linhas de df_vendas",
+                story: "Tibúrcio carregou o DataFrame df_vendas com 50 mil linhas e quer visualizar as primeiras linhas para conferir as colunas.",
+                data: [
+                    { mes: "Jan", loja: "SP", receita: "18400" },
+                    { mes: "Fev", loja: "RJ", receita: "21900" },
+                    { mes: "Mar", loja: "MG", receita: "15300" }
+                ],
+                code: "primeiras = df_vendas.___()\nprint(primeiras)",
+                options: ["head", "top5", "first", "start"],
+                answer: 0,
+                hint: "Em inglês, 'cabeça / topo' de uma tabela DataFrame é chamado de head().",
+                explanation: "O método df_vendas.head() retorna por padrão as 5 primeiras linhas de um DataFrame."
+            },
+            {
+                id: 6,
+                character: "Genoveva",
+                topic: "df_.dropna()",
+                title: "Limpando Valores Nulos (NaN) em df_amostras",
+                story: "Na análise de laboratório de Genoveva, várias medições vieram vazias (NaN). Ela precisa remover as linhas com valores ausentes de df_amostras.",
+                data: [
+                    { tubo: "A1", ph: "7.1", pureza: "98%" },
+                    { tubo: "A2", ph: "NaN", pureza: "94%" },
+                    { tubo: "A3", ph: "6.8", pureza: "NaN" }
+                ],
+                code: "df_limpo = df_amostras.___()\nprint(len(df_limpo))",
+                options: ["dropna", "remove_null", "clean_nan", "drop_empty"],
+                answer: 0,
+                hint: "O nome do método junta 'drop' (descartar) com 'na' (valores ausentes).",
+                explanation: "Em pandas, df_amostras.dropna() descarta todas as linhas que contêm valores nulos (NaN)."
+            },
+            {
+                id: 7,
+                character: "Amnésio",
+                topic: "df_.groupby()",
+                title: "Agrupando Estoque por Setor em df_estoque",
+                story: "Amnésio precisa somar a quantidade total de itens agrupando o DataFrame df_estoque pela coluna 'setor'.",
+                data: [
+                    { setor: "Norte", itens: "120", status: "OK" },
+                    { setor: "Sul", itens: "85", status: "Baixo" },
+                    { setor: "Leste", itens: "140", status: "OK" }
+                ],
+                code: "resumo = df_estoque.___(\"setor\")[\"qtd\"].sum()\nprint(resumo)",
+                options: ["groupby", "group_by", "cluster", "splitby"],
+                answer: 0,
+                hint: "No pandas, o método de agrupamento escreve-se tudo junto: groupby.",
+                explanation: "O método df_estoque.groupby(\"setor\") agrupa os registros por categoria antes de aplicar .sum()."
+            },
+            {
+                id: 8,
+                character: "Alípio",
+                topic: "df_.describe()",
+                title: "Resumo Estatístico Rápido de df_clima",
+                story: "Alípio quer calcular de uma só vez média, desvio padrão, mínimo e máximo das temperaturas registradas em df_clima.",
+                data: [
+                    { metrica: "média", temp_c: "24.6°C", umidade: "71%" },
+                    { metrica: "mínimo", temp_c: "16.0°C", umidade: "45%" },
+                    { metrica: "máximo", temp_c: "33.2°C", umidade: "92%" }
+                ],
+                code: "estatisticas = df_clima.___()\nprint(estatisticas)",
+                options: ["describe", "stats", "summary", "analyze"],
+                answer: 0,
+                hint: "Qual método em inglês 'descreve' estatisticamente todas as colunas numéricas de um DataFrame?",
+                explanation: "df_clima.describe() gera automaticamente contagem, média, desvio padrão, mínimo e máximo."
+            },
+            {
+                id: 9,
+                character: "Genésio",
+                topic: "print()",
+                title: "Painel de Ignição do Foguete",
+                story: "Genésio está na cabine e precisa exibir 'DECOLAR!' no terminal de controle para confirmar a ignição.",
+                code: "status = \"DECOLAR!\"\n___ (status)",
+                options: ["print", "show", "echo", "write"],
+                answer: 0,
+                hint: "É a função clássica do Python para mostrar texto no console.",
+                explanation: "A função padrão do Python para imprimir valores na tela é print()."
+            },
+            {
+                id: 10,
+                character: "Terturiano",
+                topic: "for / range",
+                title: "Ciclo de Compressões de Emergência",
+                story: "Para manter o ritmo, Terturiano programou um laço que repete exatamente 3 vezes a contagem de compressões.",
+                code: "for pulso in ___:\n    print(\"Compressão\", pulso)",
+                options: ["range(3)", "loop(3)", "repeat(3)", "3.times"],
+                answer: 0,
+                hint: "Em Python, geramos uma sequência numérica de 3 passos com range(...).",
+                explanation: "range(3) gera a sequência 0, 1, 2 para executar o bloco 3 vezes no for."
+            },
+            {
+                id: 11,
+                character: "Eber",
+                topic: "and",
+                title: "Dupla Trava de Segurança",
+                story: "O cofre de Eber só abre quando cracha_ok E pin_ok forem verdadeiros ao mesmo tempo.",
+                code: "cracha_ok = True\npin_ok = True\nif cracha_ok ___ pin_ok:\n    cofre_aberto = True",
+                options: ["and", "or", "not", "&"],
+                answer: 0,
+                hint: "Traduza 'E' ao mesmo tempo para a palavra-chave booleana do Python.",
+                explanation: "O operador lógico and exige que ambas as condições sejam verdadeiras."
+            },
+            {
+                id: 12,
+                character: "Genoveva",
+                topic: "list.append()",
+                title: "Adicionando Reagente na Lista",
+                story: "Genoveva criou a lista amostras = [\"agua\"] e quer adicionar \"ferro\" no final da lista.",
+                code: "amostras = [\"agua\"]\namostras.___(\"ferro\")",
+                options: ["append", "push", "add_end", "insert_last"],
+                answer: 0,
+                hint: "Qual método de lista em Python anexa um elemento ao final?",
+                explanation: "O método .append() adiciona um novo item ao final de uma lista em Python."
+            },
+            {
+                id: 13,
+                character: "Percival",
+                topic: "dict",
+                title: "Dicionário de Tipos Sanguíneos",
+                story: "Percival guardou os tipos sanguíneos em um dicionário e quer acessar a chave \"O+\".",
+                code: "sangue = {\"O+\": 12, \"A-\": 4}\nqtd = sangue[___]",
+                options: ["\"O+\"", "key(\"O+\")", ".get(\"O+\")", "O+"],
+                answer: 0,
+                hint: "A chave no dicionário é uma string exata que representa o tipo sanguíneo.",
+                explanation: "Consultamos o valor de uma chave em um dicionário usando colchetes: sangue[\"O+\"]."
+            },
+            {
+                id: 14,
+                character: "Francisnaldo",
+                topic: "while",
+                title: "Submersão até a Profundidade Alvo",
+                story: "O submarino de Francisnaldo desce enquanto a profundidade atual for menor que 200 metros.",
+                code: "profundidade = 0\n___ profundidade < 200:\n    profundidade += 50",
+                options: ["while", "until", "when", "repeat"],
+                answer: 0,
+                hint: "Qual comando repete o laço 'enquanto' uma condição for verdadeira?",
+                explanation: "O laço while repete o bloco enquanto a condição profundidade < 200 for verdadeira."
+            },
+            {
+                id: 15,
+                character: "Genoveva",
+                topic: "def",
+                title: "Declarando Função de Cálculo",
+                story: "Genoveva quer definir uma função chamada calcular_dose que recebe o peso do paciente.",
+                code: "___ calcular_dose(peso):\n    return peso * 2",
+                options: ["def", "function", "func", "criar"],
+                answer: 0,
+                hint: "É a palavra curta (3 letras) usada em Python para definir uma função.",
+                explanation: "Em Python, funções são declaradas com a palavra-chave def."
+            },
+            {
+                id: 16,
+                character: "Percival",
+                topic: "try / except",
+                title: "Proteção contra Divisão por Zero",
+                story: "Percival tenta dividir energia por um sensor que pode valer zero sem derrubar o programa.",
+                code: "try:\n    taxa = 100 / sensor\n___ ZeroDivisionError:\n    taxa = 0",
+                options: ["except", "catch", "rescue", "error"],
+                answer: 0,
+                hint: "Após try:, o bloco que trata o erro em Python começa com qual palavra?",
+                explanation: "Para capturar exceções em Python, usamos try: junto com except ...:."
+            },
+            {
+                id: 17,
+                character: "Tibúrcio",
+                topic: "df_.shape",
+                title: "Dimensões da Tabela df_log",
+                story: "Tibúrcio quer verificar rapidamente quantas linhas e colunas possui o DataFrame df_log.",
+                data: [
+                    { evento: "login", ip: "10.0.0.1", ok: "True" },
+                    { evento: "query", ip: "10.0.0.2", ok: "True" }
+                ],
+                code: "linhas, colunas = df_log.___\nprint(linhas, colunas)",
+                options: ["shape", "size_xy", "dims()", "count_rc"],
+                answer: 0,
+                hint: "É um atributo (sem parênteses) que retorna uma tupla (linhas, colunas).",
+                explanation: "O atributo df_log.shape retorna uma tupla (numero_de_linhas, numero_de_colunas)."
+            },
+            {
+                id: 18,
+                character: "Amnésio",
+                topic: "df_.sort_values()",
+                title: "Ordenando df_ranking por Pontos",
+                story: "Amnésio quer ordenar o DataFrame df_ranking de acordo com os valores da coluna 'pontos'.",
+                data: [
+                    { jogador: "Ana", pontos: "900" },
+                    { jogador: "Beto", pontos: "1450" },
+                    { jogador: "Caio", pontos: "1100" }
+                ],
+                code: "ordenado = df_ranking.___(\"pontos\", ascending=False)\nprint(ordenado)",
+                options: ["sort_values", "order_by", "sort_df", "rank_values"],
+                answer: 0,
+                hint: "No pandas, ordenamos um DataFrame pelos valores de uma coluna com sort_values.",
+                explanation: "df_ranking.sort_values(\"pontos\", ascending=False) ordena do maior para o menor."
+            },
+            {
+                id: 19,
+                character: "Eber",
+                topic: "len()",
+                title: "Contando Pacotes Interceptados",
+                story: "Eber armazenou os pacotes recebidos na lista pacotes e precisa saber quantos elementos existem nela.",
+                code: "pacotes = [\"pkt1\", \"pkt2\", \"pkt3\", \"pkt4\"]\ntotal = ___(pacotes)\nprint(total)",
+                options: ["len", "count", "size", "length"],
+                answer: 0,
+                hint: "É a função embutida do Python que retorna o tamanho de listas, strings ou coleções.",
+                explanation: "A função len(pacotes) retorna a quantidade total de itens na lista."
+            },
+            {
+                id: 20,
+                character: "Francisnaldo",
+                topic: "elif",
+                title: "Faixas de Pressão no Sonar",
+                story: "Francisnaldo verifica se a pressão é 'alta'; se não for, testa uma segunda condição intermediária 'media' antes do else.",
+                code: "if pressao == \"alta\":\n    alerta = \"VERMELHO\"\n___ pressao == \"media\":\n    alerta = \"AMARELO\"\nelse:\n    alerta = \"VERDE\"",
+                options: ["elif", "else if", "elseif", "when"],
+                answer: 0,
+                hint: "Em Python, 'senão se' escreve-se junto em quatro letras: elif.",
+                explanation: "Usamos elif para adicionar condições intermediárias após um if inicial."
+            },
+            {
+                id: 21,
+                character: "Antéria",
+                topic: "str.upper()",
+                title: "Padronizando Códigos de Satélite com Antéria",
+                story: "Antéria recebeu o sinal 'sat_alfa' em letras minúsculas e precisa convertê-lo todo para MAIÚSCULAS.",
+                code: "sinal = \"sat_alfa\"\ncodigo = sinal.___()\nprint(codigo)",
+                options: ["upper", "capitalize", "to_upper", "caps"],
+                answer: 0,
+                hint: "Em inglês, letras maiúsculas são chamadas de 'upper case'.",
+                explanation: "O método .upper() retorna uma nova string com todos os caracteres em maiúsculas."
+            },
+            {
+                id: 22,
+                character: "Girúndia",
+                topic: "sum()",
+                title: "Total de Peças na Linha da Girúndia",
+                story: "Girúndia registrou os lotes produzidos na lista lotes = [12, 18, 25] e precisa somar todos os valores rapidamente.",
+                code: "lotes = [12, 18, 25]\ntotal = ___(lotes)\nprint(total)",
+                options: ["sum", "total", "add_all", "count"],
+                answer: 0,
+                hint: "É a função nativa de 3 letras do Python para somar os itens de uma lista.",
+                explanation: "A função embutida sum(lotes) calcula a soma de todos os elementos da lista."
+            },
+            {
+                id: 23,
+                character: "Arcídia",
+                topic: "return",
+                title: "Devolvendo o Resultado da Função da Arcídia",
+                story: "Arcídia escreveu uma função para calcular o dobro de uma chave, mas esqueceu a palavra que devolve o valor.",
+                code: "def dobrar(valor):\n    ___ valor * 2",
+                options: ["return", "yields", "output", "send"],
+                answer: 0,
+                hint: "Qual palavra reservada encerra a função e retorna um resultado para quem a chamou?",
+                explanation: "Usamos return para devolver o resultado calculado dentro de uma função em Python."
+            },
+            {
+                id: 24,
+                character: "Esmeraldina",
+                topic: "df_.columns",
+                title: "Listando Nomes das Colunas de df_gemas",
+                story: "Esmeraldina abriu a tabela df_gemas e quer inspecionar os nomes de todas as colunas disponíveis.",
+                data: [
+                    { pedra: "Esmeralda", quilates: "4.2", origem: "BA" },
+                    { pedra: "Safira", quilates: "3.1", origem: "MG" },
+                    { pedra: "Rubi", quilates: "2.8", origem: "GO" }
+                ],
+                code: "nomes_colunas = df_gemas.___\nprint(nomes_colunas)",
+                options: ["columns", "headers", "cols()", "fields"],
+                answer: 0,
+                hint: "É um atributo (sem parênteses) do DataFrame que guarda o índice de colunas.",
+                explanation: "O atributo df_gemas.columns retorna os rótulos das colunas do DataFrame."
+            },
+            {
+                id: 25,
+                character: "Porfília",
+                topic: "in",
+                title: "Rastreando Suspeito na Lista da Porfília",
+                story: "Porfília quer verificar se o código 'X99' está presente dentro da lista de registros suspeitos.",
+                code: "suspeitos = [\"A12\", \"X99\", \"B04\"]\nif \"X99\" ___ suspeitos:\n    print(\"Alerta encontrado!\")",
+                options: ["in", "has", "inside", "contains"],
+                answer: 0,
+                hint: "Qual operador de 2 letras verifica pertinência ('está em') dentro de uma lista Python?",
+                explanation: "O operador in verifica se um elemento pertence a uma lista, tupla, string ou dicionário."
             }
-        })();
+        ];
+
+        function escapeHtml(str) {
+            return String(str)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;");
+        }
+
+        function buildAvatarSVG(av) {
+            const cfg = av || userAvatar || { style: "bot", theme: "indigo", gear: "antenna" };
+            const palettes = {
+                indigo: { bg: "#1e1b4b", primary: "#6366f1", accent: "#22d3ee" },
+                emerald: { bg: "#022c22", primary: "#10b981", accent: "#a3e635" },
+                amber: { bg: "#451a03", primary: "#f59e0b", accent: "#fde047" },
+                rose: { bg: "#4c0519", primary: "#f43f5e", accent: "#e879f9" }
+            };
+            const pal = palettes[cfg.theme] || palettes.indigo;
+
+            let gearSvg = "";
+            if (cfg.gear === "antenna") {
+                gearSvg = `<line x1="32" y1="14" x2="32" y2="6" stroke="${pal.accent}" stroke-width="3" stroke-linecap="round"/><circle cx="32" cy="5" r="3" fill="${pal.accent}"/>`;
+            } else if (cfg.gear === "crown") {
+                gearSvg = `<polygon points="20,15 24,7 32,13 40,7 44,15" fill="#fbbf24"/>`;
+            } else if (cfg.gear === "spark") {
+                gearSvg = `<polygon points="32,3 34,9 40,11 34,13 32,19 30,13 24,11 30,9" fill="${pal.accent}"/>`;
+            }
+
+            let earsSvg = "";
+            if (cfg.style === "cat") {
+                earsSvg = `<polygon points="15,22 20,10 27,20" fill="${pal.primary}"/><polygon points="49,22 44,10 37,20" fill="${pal.primary}"/>`;
+            } else if (cfg.style === "fox") {
+                earsSvg = `<polygon points="13,24 18,9 28,20" fill="${pal.accent}"/><polygon points="51,24 46,9 36,20" fill="${pal.accent}"/>`;
+            }
+
+            const eyesSvg = cfg.style === "visor"
+                ? `<rect x="19" y="27" width="26" height="8" rx="4" fill="${pal.accent}"/>`
+                : `<circle cx="25" cy="31" r="3.5" fill="${pal.accent}"/><circle cx="39" cy="31" r="3.5" fill="${pal.accent}"/>`;
+
+            return `<svg viewBox="0 0 64 64" class="w-full h-full">
+                <rect width="64" height="64" rx="14" fill="${pal.bg}"/>
+                ${gearSvg}
+                ${earsSvg}
+                <rect x="15" y="18" width="34" height="30" rx="10" fill="${pal.primary}"/>
+                ${eyesSvg}
+                <rect x="24" y="40" width="16" height="3" rx="1.5" fill="#f8fafc" opacity="0.85"/>
+            </svg>`;
+        }
+
+        function renderAllAvatars() {
+            const svg = buildAvatarSVG(userAvatar);
+            ["header-avatar-badge", "home-avatar-preview", "hud-avatar", "result-avatar"].forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) el.innerHTML = svg;
+            });
+            const homeName = document.getElementById("home-avatar-name");
+            if (homeName) homeName.textContent = userAvatar.name || "Jogador Py";
+        }
+
+        function saveUserAvatar() {
+            try {
+                localStorage.setItem(AVATAR_KEY, JSON.stringify(userAvatar));
+            } catch (_) {}
+        }
+
+        function loadUserAvatar() {
+            try {
+                const saved = JSON.parse(localStorage.getItem(AVATAR_KEY) || "null");
+                if (saved && typeof saved === "object") {
+                    userAvatar = { ...userAvatar, ...saved };
+                }
+            } catch (_) {}
+
+            const styleEl = document.getElementById("avatar-style");
+            const themeEl = document.getElementById("avatar-theme");
+            const gearEl = document.getElementById("avatar-gear");
+            const nameEl = document.getElementById("player-name");
+            if (styleEl) styleEl.value = userAvatar.style;
+            if (themeEl) themeEl.value = userAvatar.theme;
+            if (gearEl) gearEl.value = userAvatar.gear;
+            if (nameEl && userAvatar.name) nameEl.value = userAvatar.name;
+            renderAllAvatars();
+        }
+
+        function syncAvatarName() {
+            const nameEl = document.getElementById("player-name");
+            userAvatar.name = (nameEl && nameEl.value.trim()) || "Jogador Py";
+            saveUserAvatar();
+            renderAllAvatars();
+        }
+
+        function updateAvatarFromControls() {
+            const styleEl = document.getElementById("avatar-style");
+            const themeEl = document.getElementById("avatar-theme");
+            const gearEl = document.getElementById("avatar-gear");
+            if (styleEl) userAvatar.style = styleEl.value;
+            if (themeEl) userAvatar.theme = themeEl.value;
+            if (gearEl) userAvatar.gear = gearEl.value;
+            saveUserAvatar();
+            renderAllAvatars();
+        }
+
+        function randomizeAvatar() {
+            const styles = ["bot", "visor", "cat", "fox"];
+            const themes = ["indigo", "emerald", "amber", "rose"];
+            const gears = ["antenna", "crown", "spark", "none"];
+            userAvatar.style = styles[Math.floor(Math.random() * styles.length)];
+            userAvatar.theme = themes[Math.floor(Math.random() * themes.length)];
+            userAvatar.gear = gears[Math.floor(Math.random() * gears.length)];
+            const styleEl = document.getElementById("avatar-style");
+            const themeEl = document.getElementById("avatar-theme");
+            const gearEl = document.getElementById("avatar-gear");
+            if (styleEl) styleEl.value = userAvatar.style;
+            if (themeEl) themeEl.value = userAvatar.theme;
+            if (gearEl) gearEl.value = userAvatar.gear;
+            saveUserAvatar();
+            renderAllAvatars();
+        }
+
+        function buildCaseIllustration(c) {
+            const topic = String(c?.topic || "");
+            if (topic.startsWith("df_.") || topic.startsWith("read_")) {
+                return `<svg viewBox="0 0 120 72" class="w-full h-full">
+                    <rect x="12" y="10" width="96" height="52" rx="8" fill="#0f172a" stroke="#38bdf8" stroke-width="2"/>
+                    <line x1="12" y1="26" x2="108" y2="26" stroke="#38bdf8" stroke-width="2"/>
+                    <line x1="44" y1="10" x2="44" y2="62" stroke="#1e293b" stroke-width="2"/>
+                    <line x1="76" y1="10" x2="76" y2="62" stroke="#1e293b" stroke-width="2"/>
+                    <circle cx="28" cy="18" r="3" fill="#22d3ee"/>
+                    <circle cx="60" cy="18" r="3" fill="#a855f7"/>
+                    <circle cx="92" cy="18" r="3" fill="#34d399"/>
+                </svg>`;
+            }
+            return `<svg viewBox="0 0 120 72" class="w-full h-full">
+                <rect x="14" y="10" width="92" height="52" rx="10" fill="#0f172a" stroke="#818cf8" stroke-width="2"/>
+                <polyline points="34,28 24,36 34,44" fill="none" stroke="#34d399" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline points="86,28 96,36 86,44" fill="none" stroke="#34d399" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+                <line x1="66" y1="24" x2="54" y2="48" stroke="#f59e0b" stroke-width="3" stroke-linecap="round"/>
+            </svg>`;
+        }
 
         function isSupabaseConfigured() {
-            return Boolean(
-                SUPABASE_URL &&
-                SUPABASE_ANON_KEY &&
-                !SUPABASE_ANON_KEY.includes("...") &&
-                window.supabase &&
-                typeof window.supabase.createClient === "function"
-            );
+            return Boolean(SUPABASE_URL && SUPABASE_ANON_KEY && SUPABASE_TABLE);
+        }
+
+        function normalizePin(pin) {
+            return String(pin || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
+        }
+
+        function getLocalPlayerId() {
+            let pid = sessionStorage.getItem("pyquest_player_id");
+            if (!pid) {
+                pid = "p_" + Math.random().toString(36).slice(2, 10);
+                sessionStorage.setItem("pyquest_player_id", pid);
+            }
+            return pid;
+        }
+
+        function readCachedRoom(pin) {
+            const cleanPin = normalizePin(pin);
+            if (!cleanPin) return null;
+            try {
+                const raw = localStorage.getItem("pyquest_room_" + cleanPin);
+                return raw ? JSON.parse(raw) : null;
+            } catch (_) {
+                return null;
+            }
+        }
+
+        function writeCachedRoom(room) {
+            if (!room || !room.pin) return;
+            const cleanPin = normalizePin(room.pin);
+            try {
+                localStorage.setItem("pyquest_room_" + cleanPin, JSON.stringify({ ...room, pin: cleanPin }));
+            } catch (_) {}
+        }
+
+        const roomBroadcastChannel = typeof BroadcastChannel !== "undefined"
+            ? new BroadcastChannel("pyquest_arcade_rooms_v1")
+            : null;
+
+        function broadcastRoomLocally(room) {
+            if (!room || !room.pin) return;
+            const cleanPin = normalizePin(room.pin);
+            const payload = { ...room, pin: cleanPin, updated_at: new Date().toISOString() };
+            writeCachedRoom(payload);
+            if (roomBroadcastChannel) {
+                try {
+                    roomBroadcastChannel.postMessage({ type: "room_update", room: payload });
+                } catch (_) {}
+            }
+        }
+
+        function handleIncomingRoomUpdate(room) {
+            if (!room || !room.pin) return;
+            const cleanPin = normalizePin(room.pin);
+            const activePin = normalizePin(currentRoomPin || (currentRoomData && currentRoomData.pin) || "");
+            if (activePin && cleanPin !== activePin) return;
+
+            const normalizedRoom = {
+                pin: cleanPin,
+                status: room.status || "waiting",
+                host_name: room.host_name || "Host",
+                players: Array.isArray(room.players) ? room.players : [],
+                current_question: Number(room.current_question || 0),
+                updated_at: room.updated_at || new Date().toISOString()
+            };
+
+            currentRoomData = normalizedRoom;
+            writeCachedRoom(normalizedRoom);
+            renderRoomPlayersUI(normalizedRoom);
+            renderLiveRoomScoreboard(normalizedRoom);
+
+            const joinVisible = !document.getElementById("screen-join")?.classList.contains("hidden");
+            const gameVisible = !document.getElementById("screen-game")?.classList.contains("hidden");
+            if (normalizedRoom.status === "playing" && joinVisible && !gameVisible) {
+                beginRoomGameplay(normalizedRoom);
+            }
+        }
+
+        if (roomBroadcastChannel) {
+            roomBroadcastChannel.onmessage = (event) => {
+                const msg = event?.data;
+                if (msg && msg.type === "room_update" && msg.room) {
+                    handleIncomingRoomUpdate(msg.room);
+                }
+            };
+        }
+
+        function getCurrentPlayerSnapshot() {
+            const nameInput = document.getElementById("player-name");
+            const playerName = (nameInput && nameInput.value.trim()) || (userAvatar && userAvatar.name) || "Jogador Py";
+            return {
+                id: getLocalPlayerId(),
+                name: playerName,
+                score: gameState ? Number(gameState.score || 0) : 0,
+                correct: gameState ? Number(gameState.correct || 0) : 0,
+                streak: gameState ? Number(gameState.bestStreak || gameState.streak || 0) : 0,
+                avatar: userAvatar ? { ...userAvatar, name: playerName } : { style: "bot", theme: "indigo", gear: "antenna", name: playerName },
+                updated_at: new Date().toISOString()
+            };
+        }
+
+        function renderRoomPlayersUI(room) {
+            const listEl = document.getElementById("lobby-players-list");
+            const countEl = document.getElementById("lobby-player-count");
+            if (!listEl || !countEl) return;
+            const players = Array.isArray(room?.players) ? room.players : [];
+            countEl.textContent = `${players.length} ${players.length === 1 ? "conectado" : "conectados"}`;
+            listEl.innerHTML = "";
+            if (!players.length) {
+                listEl.innerHTML = `<span class="text-slate-400">Aguardando jogadores entrarem com o PIN...</span>`;
+                return;
+            }
+            players.forEach((p) => {
+                const badge = document.createElement("span");
+                badge.className = "px-3 py-1.5 rounded-xl bg-slate-900 border border-indigo-400/30 text-slate-100 font-semibold flex items-center gap-2";
+                badge.textContent = `${p.name || "Jogador"} • ${Number(p.score || 0)} pts`;
+                listEl.appendChild(badge);
+            });
+        }
+
+        function renderLiveRoomScoreboard(room) {
+            const boardEl = document.getElementById("hud-live-scoreboard");
+            if (!boardEl) return;
+            if (currentMode !== "room" || !currentRoomPin) {
+                boardEl.classList.add("hidden");
+                boardEl.innerHTML = "";
+                return;
+            }
+            const players = Array.isArray(room?.players) ? [...room.players] : [];
+            players.sort((a, b) => Number(b.score || 0) - Number(a.score || 0));
+            boardEl.classList.remove("hidden");
+            boardEl.classList.add("flex");
+            boardEl.innerHTML = players.slice(0, 4).map((p, idx) => {
+                const isMe = p.id === getLocalPlayerId();
+                return `<span class="px-2 py-0.5 rounded-lg text-xs font-mono ${isMe ? "bg-indigo-600/40 border border-indigo-400 text-white font-bold" : "bg-slate-900/90 border border-slate-700 text-slate-300"}">#${idx + 1} ${escapeHtml(p.name || "Jogador")}: ${Number(p.score || 0)}</span>`;
+            }).join("");
         }
 
         function initSupabaseClient() {
@@ -429,893 +1055,344 @@
                 }
                 return null;
             }
-            if (!supabaseClient) {
-                supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            if (!supabaseClient && window.supabase && typeof window.supabase.createClient === "function") {
+                supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+                    realtime: {
+                        params: { eventsPerSecond: 10 }
+                    }
+                });
             }
             if (pill) {
-                pill.textContent = "● Supabase Online";
-                pill.className = "px-2.5 py-1.5 rounded-xl bg-emerald-950/90 border border-emerald-500/40 text-emerald-200 text-xs font-mono";
+                pill.textContent = realtimeBlockedInSandbox ? "◐ Sync HTTP / Local" : "● Supabase Online";
+                pill.className = realtimeBlockedInSandbox
+                    ? "px-2.5 py-1.5 rounded-xl bg-amber-950/80 border border-amber-500/40 text-amber-200 text-xs font-mono"
+                    : "px-2.5 py-1.5 rounded-xl bg-emerald-950/90 border border-emerald-500/40 text-emerald-200 text-xs font-mono";
             }
             return supabaseClient;
         }
 
-        function renderRoomPlayersUI(room) {
-            const players = Array.isArray(room?.players) ? [...room.players] : [];
-            players.sort((a, b) => (b.score || 0) - (a.score || 0));
-
-            const countEl = document.getElementById("lobby-player-count");
-            const listEl = document.getElementById("lobby-players-list");
-            if (countEl) countEl.textContent = `${players.length} conectado${players.length === 1 ? "" : "s"}`;
-            if (listEl) {
-                listEl.innerHTML = players.length
-                    ? players.map((p) => `
-                        <span class="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-slate-100 font-semibold flex items-center gap-2">
-                            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-                            <span>${escapeHtml(p.name || "Jogador")}</span>
-                            <span class="font-mono text-indigo-300">${p.score || 0} pts</span>
-                        </span>
-                    `).join("")
-                    : `<span class="text-slate-500">Aguardando jogadores entrarem com o PIN...</span>`;
+        function stopRoomPolling() {
+            if (roomPollingTimer) {
+                clearInterval(roomPollingTimer);
+                roomPollingTimer = null;
             }
+        }
 
-            const hudBoard = document.getElementById("hud-live-scoreboard");
-            if (hudBoard && currentMode === "room" && players.length) {
-                hudBoard.classList.remove("hidden");
-                hudBoard.classList.add("flex");
-                hudBoard.innerHTML = players.slice(0, 4).map((p, idx) => `
-                    <span class="px-2.5 py-1 rounded-lg bg-slate-900/90 border ${p.id === localPlayerId ? "border-indigo-400 text-white" : "border-slate-800 text-slate-300"} text-xs font-mono font-bold">
-                        #${idx + 1} ${escapeHtml(p.name || "Player")}: ${p.score || 0}
-                    </span>
-                `).join("");
-            } else if (hudBoard) {
-                hudBoard.classList.add("hidden");
-                hudBoard.classList.remove("flex");
-            }
+        async function pollRoomByPin(pin) {
+            const cleanPin = normalizePin(pin);
+            if (!cleanPin) return;
+            const client = initSupabaseClient();
+            if (!client) return;
+            try {
+                const { data, error } = await client
+                    .from(SUPABASE_TABLE)
+                    .select("*")
+                    .eq("pin", cleanPin)
+                    .maybeSingle();
+                if (!error && data && normalizePin(data.pin) === cleanPin) {
+                    handleIncomingRoomUpdate(data);
+                }
+            } catch (_) {}
+        }
+
+        function startRoomPolling(pin) {
+            const cleanPin = normalizePin(pin);
+            stopRoomPolling();
+            if (!cleanPin) return;
+            pollRoomByPin(cleanPin);
+            roomPollingTimer = setInterval(() => {
+                pollRoomByPin(cleanPin);
+                const cached = readCachedRoom(cleanPin);
+                if (cached) {
+                    handleIncomingRoomUpdate(cached);
+                }
+            }, 2000);
         }
 
         async function subscribeToRoomPin(pin) {
+            const cleanPin = normalizePin(pin);
+            if (!cleanPin) return;
+
+            startRoomPolling(cleanPin);
+
             const client = initSupabaseClient();
-            if (!client || !pin) return;
+            if (!client || realtimeBlockedInSandbox) return;
 
-            if (roomChannel) {
-                try {
+            try {
+                if (roomChannel && typeof client.removeChannel === "function") {
                     await client.removeChannel(roomChannel);
-                } catch (_) {}
-                roomChannel = null;
-            }
+                    roomChannel = null;
+                }
 
-            roomChannel = client
-                .channel(`room_${pin}`)
-                .on(
-                    "postgres_changes",
-                    {
-                        event: "*",
-                        schema: "public",
-                        table: SUPABASE_TABLE,
-                        filter: `pin=eq.${pin}`
-                    },
-                    (payload) => {
-                        const nextRoom = payload.new || payload.old;
-                        if (nextRoom && nextRoom.pin === pin) {
-                            currentRoomData = nextRoom;
-                            renderRoomPlayersUI(nextRoom);
-                        }
-                    }
-                )
-                .subscribe();
+                if (typeof client.channel === "function") {
+                    roomChannel = client
+                        .channel(`pyquest_room_${cleanPin}`)
+                        .on(
+                            "postgres_changes",
+                            {
+                                event: "*",
+                                schema: "public",
+                                table: SUPABASE_TABLE,
+                                filter: `pin=eq.${cleanPin}`
+                            },
+                            (payload) => {
+                                const updated = payload?.new;
+                                if (updated && normalizePin(updated.pin) === cleanPin) {
+                                    handleIncomingRoomUpdate(updated);
+                                }
+                            }
+                        )
+                        .subscribe((status) => {
+                            if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+                                realtimeBlockedInSandbox = true;
+                                initSupabaseClient();
+                            }
+                        });
+                }
+            } catch (_) {
+                realtimeBlockedInSandbox = true;
+                initSupabaseClient();
+            }
         }
 
-        async function upsertPlayerInRoom(pin, patch = {}) {
-            const client = initSupabaseClient();
-            if (!client || !pin) return;
+        async function upsertPlayerInRoom(pin, forcedStatus = null) {
+            const cleanPin = normalizePin(pin);
+            if (!cleanPin) return null;
 
-            const nameVal = (document.getElementById("player-name")?.value || "Jogador Py").trim() || "Jogador Py";
-            const { data: existing, error: fetchErr } = await client
-                .from(SUPABASE_TABLE)
-                .select("*")
-                .eq("pin", pin)
-                .maybeSingle();
-
-            if (fetchErr) {
-                showToast("Erro ao acessar sala no Supabase: " + fetchErr.message);
-                return;
-            }
-
-            const prevPlayers = Array.isArray(existing?.players) ? [...existing.players] : [];
-            const idx = prevPlayers.findIndex((p) => p.id === localPlayerId);
-            const playerPayload = {
-                id: localPlayerId,
-                name: nameVal,
-                avatar: userAvatar,
-                score: patch.score !== undefined ? patch.score : (idx >= 0 ? prevPlayers[idx].score || 0 : 0),
-                correct: patch.correct !== undefined ? patch.correct : (idx >= 0 ? prevPlayers[idx].correct || 0 : 0),
-                streak: patch.streak !== undefined ? patch.streak : (idx >= 0 ? prevPlayers[idx].streak || 0 : 0),
-                updated_at: Date.now()
+            const me = getCurrentPlayerSnapshot();
+            const existing = readCachedRoom(cleanPin) || currentRoomData || {
+                pin: cleanPin,
+                status: "waiting",
+                host_name: me.name,
+                players: [],
+                current_question: 0
             };
 
+            const playersList = Array.isArray(existing.players) ? [...existing.players] : [];
+            const idx = playersList.findIndex((p) => p.id === me.id);
             if (idx >= 0) {
-                prevPlayers[idx] = { ...prevPlayers[idx], ...playerPayload };
+                playersList[idx] = { ...playersList[idx], ...me };
             } else {
-                prevPlayers.push(playerPayload);
+                playersList.push(me);
             }
 
-            const rowToSave = {
-                pin,
-                status: patch.status || existing?.status || "waiting",
-                host_name: existing?.host_name || nameVal,
-                players: prevPlayers,
-                current_question: patch.current_question !== undefined ? patch.current_question : (existing?.current_question || 0),
+            const nextRoom = {
+                ...existing,
+                pin: cleanPin,
+                status: forcedStatus || existing.status || "waiting",
+                host_name: existing.host_name || me.name,
+                players: playersList,
                 updated_at: new Date().toISOString()
             };
 
-            const { data: saved, error: saveErr } = await client
-                .from(SUPABASE_TABLE)
-                .upsert(rowToSave, { onConflict: "pin" })
-                .select()
-                .maybeSingle();
+            handleIncomingRoomUpdate(nextRoom);
+            broadcastRoomLocally(nextRoom);
 
-            if (saveErr) {
-                showToast("Erro ao salvar sala no Supabase: " + saveErr.message);
+            const client = initSupabaseClient();
+            if (client) {
+                try {
+                    const { data, error } = await client
+                        .from(SUPABASE_TABLE)
+                        .upsert(nextRoom, { onConflict: "pin" })
+                        .select()
+                        .maybeSingle();
+                    if (!error && data) {
+                        handleIncomingRoomUpdate(data);
+                        broadcastRoomLocally(data);
+                        return data;
+                    }
+                } catch (_) {}
+            }
+            return nextRoom;
+        }
+
+        async function openCreateRoomView() {
+            const pin = String(Math.floor(100000 + Math.random() * 900000));
+            currentMode = "room";
+            currentRoomPin = pin;
+            showScreen("screen-join");
+            const titleEl = document.getElementById("room-modal-title");
+            const createPanel = document.getElementById("create-room-panel");
+            const joinPanel = document.getElementById("join-room-panel");
+            const pinDisplay = document.getElementById("generated-pin-display");
+            if (titleEl) titleEl.textContent = "Criar Sala por PIN";
+            if (createPanel) createPanel.classList.remove("hidden");
+            if (joinPanel) joinPanel.classList.add("hidden");
+            if (pinDisplay) pinDisplay.textContent = pin;
+
+            await upsertPlayerInRoom(pin, "waiting");
+            await subscribeToRoomPin(pin);
+        }
+
+        async function openJoinRoomView() {
+            currentMode = "room";
+            showScreen("screen-join");
+            const titleEl = document.getElementById("room-modal-title");
+            const createPanel = document.getElementById("create-room-panel");
+            const joinPanel = document.getElementById("join-room-panel");
+            const pinInput = document.getElementById("room-pin-input");
+            if (titleEl) titleEl.textContent = "Entrar em Sala por PIN";
+            if (createPanel) createPanel.classList.add("hidden");
+            if (joinPanel) joinPanel.classList.remove("hidden");
+            if (pinInput) {
+                pinInput.value = normalizePin(currentRoomPin || "");
+                pinInput.focus();
+                pinInput.oninput = async () => {
+                    const typed = normalizePin(pinInput.value);
+                    pinInput.value = typed;
+                    if (typed.length === 6) {
+                        currentRoomPin = typed;
+                        await upsertPlayerInRoom(typed, "waiting");
+                        await subscribeToRoomPin(typed);
+                    }
+                };
+            }
+            renderRoomPlayersUI(currentRoomData || { players: [] });
+        }
+
+        function copyRoomPin() {
+            const pin = normalizePin(document.getElementById("generated-pin-display")?.textContent || currentRoomPin);
+            if (!pin) return;
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(pin).catch(() => {});
+            }
+            showToast(`PIN ${pin} copiado! Compartilhe com quem vai entrar.`);
+        }
+
+        function buildDeckFromSettings() {
+            const cat = document.getElementById("category-filter")?.value || "all";
+            const lenVal = document.getElementById("session-length")?.value || "all";
+            let pool = [...CASES];
+
+            if (cat === "logic") {
+                pool = pool.filter((c) => ["if / else", "else", "for / range", "and", "while", "elif", "in"].includes(c.topic));
+            } else if (cat === "structures") {
+                pool = pool.filter((c) => ["print()", "list.append()", "dict", "def", "try / except", "len()", "str.upper()", "sum()", "return"].includes(c.topic));
+            } else if (cat === "pandas") {
+                pool = pool.filter((c) => c.topic.startsWith("df_.") || c.topic.startsWith("read_"));
+            }
+
+            if (!pool.length) pool = [...CASES];
+            pool.sort(() => Math.random() - 0.5);
+
+            if (lenVal !== "all") {
+                const count = Math.max(1, Math.min(pool.length, Number(lenVal) || pool.length));
+                pool = pool.slice(0, count);
+            }
+            return pool;
+        }
+
+        function beginRoomGameplay(room) {
+            const cleanPin = normalizePin(room?.pin || currentRoomPin);
+            currentMode = "room";
+            currentRoomPin = cleanPin;
+            const playerName = (document.getElementById("player-name")?.value || "").trim() || userAvatar?.name || "Jogador Py";
+            if (userAvatar) userAvatar.name = playerName;
+
+            const deck = buildDeckFromSettings();
+            gameState = {
+                playerName,
+                deck,
+                index: 0,
+                score: 0,
+                correct: 0,
+                streak: 0,
+                bestStreak: 0,
+                timeLeft: 25,
+                hintUsed: false,
+                answered: false
+            };
+
+            showScreen("screen-game");
+            renderLiveRoomScoreboard(room || currentRoomData);
+            renderCurrentQuestion();
+        }
+
+        async function startRoomGame() {
+            const createVisible = !document.getElementById("create-room-panel")?.classList.contains("hidden");
+            const inputPin = normalizePin(document.getElementById("room-pin-input")?.value || "");
+            const activePin = createVisible ? normalizePin(currentRoomPin) : (inputPin || normalizePin(currentRoomPin));
+
+            if (!activePin || activePin.length < 4) {
+                showToast("Digite ou gere um PIN válido antes de iniciar a partida.");
                 return;
             }
 
-            currentRoomData = saved || rowToSave;
-            renderRoomPlayersUI(currentRoomData);
+            currentRoomPin = activePin;
+            await subscribeToRoomPin(activePin);
+            const updatedRoom = await upsertPlayerInRoom(activePin, "playing");
+            beginRoomGameplay(updatedRoom || { pin: activePin, status: "playing", players: [] });
         }
 
-        /* =====================================================================
-           1. BANCO DE 25 CASOS PYTHON & PANDAS + TRILHAS POR CASO
-           ===================================================================== */
-        const CHAT_AUDIO_TRACKS = [
-            "hitslab-gaming-game-minecraft-background-music-278382.mp3",
-            "mfcc-retro-arcade-game-music-297305.mp3",
-            "arpmedia-retro-arcade-game-music-577821.mp3",
-            "maksymmalko-roblox-minecraft-fortnite-video-game-music-358426 (1).mp3",
-            "tatamusic-game-game-music-599001.mp3",
-            "paulyudin-game-game-music-573991.mp3",
-            "sonican-thinking-time-219360.mp3",
-            "sonican-ticking-time-action-countdown-loop-283365.mp3",
-            "vadymkuznietsov-quiz-countdown-337785.mp3",
-            "hitslab-gaming-game-minecraft-background-music-278382_2.mp3",
-            "mfcc-retro-arcade-game-music-297305_2.mp3",
-            "paoloargento-quiz-countdown-194417.mp3",
-            "sonican-flash-quiz-loop-236356.mp3",
-            "hitslab-gaming-game-minecraft-background-music-278382 (1).mp3",
-            "hitslab-gaming-game-minecraft-background-music-278382_3.mp3",
-            "mfcc-retro-arcade-game-music-297305_3.mp3",
-            "arpmedia-retro-arcade-game-music-577821_2.mp3",
-            "maksymmalko-roblox-minecraft-fortnite-video-game-music-358426 (1)_2.mp3",
-            "maksymmalko-roblox-minecraft-fortnite-video-game-music-358426_2.mp3",
-            "tatamusic-game-game-music-599001_2.mp3",
-            "paulyudin-game-game-music-573991_2.mp3",
-            "sonican-thinking-time-219360_2.mp3",
-            "sonican-ticking-time-action-countdown-loop-283365_2.mp3",
-            "vadymkuznietsov-quiz-countdown-337785_2.mp3"
-        ];
+        function startSoloGame() {
+            stopRoomPolling();
+            currentMode = "solo";
+            currentRoomPin = null;
+            currentRoomData = null;
+            const playerName = (document.getElementById("player-name")?.value || "").trim() || userAvatar?.name || "Jogador Py";
+            if (userAvatar) userAvatar.name = playerName;
 
-        const CASES = [
-            {
-                id: 1, category: "logic", character: "Terturiano", topic: "if / else", scene: "pulse",
-                title: "Parada Cardíaca com Adrenalina",
-                story: "Terturiano monitora um paciente com batimentos zerados (bpm == 0). Se não houver pulso, ele precisa aplicar 'adrenalina' imediatamente!",
-                code: "bpm = 0\nif bpm == 0:\n    acao = ___\nelse:\n    acao = \"monitorar\"",
-                options: ["\"adrenalina\"", "adrenalina()", "print(\"adrenalina\")", "bpm = \"adrenalina\""],
+            const deck = buildDeckFromSettings();
+            gameState = {
+                playerName,
+                deck,
+                index: 0,
+                score: 0,
                 correct: 0,
-                hint: "Quando bpm == 0, a resposta certa é uma string entre aspas com o nome do medicamento.",
-                explanation: "Como a condição verifica bpm == 0, atribuímos a string \"adrenalina\" à variável acao."
-            },
-            {
-                id: 2, category: "logic", character: "Alípio", topic: "else", scene: "rain",
-                title: "Alípio e o Guarda-Chuva",
-                story: "Alípio olhou para o céu: está chovendo! Se chover, ele leva 'guarda-chuva'; senão (else), leva 'oculos_escuros'.",
-                code: "chovendo = True\nif chovendo:\n    item = \"guarda-chuva\"\n___:\n    item = \"oculos_escuros\"",
-                options: ["else", "elif", "senao", "default"],
-                correct: 0,
-                hint: "A própria história já cita a palavra em inglês para 'senão' quando o if não executa.",
-                explanation: "Em Python, o bloco alternativo quando o if é falso usa a palavra reservada else:."
-            },
-            {
-                id: 3, category: "pandas", character: "Tibúrcio", topic: "pd.read_json()", scene: "json",
-                title: "Tibúrcio precisa ler um arquivo JSON",
-                story: "Tibúrcio recebeu o arquivo 'dados_tiburcio.json' estruturado em JSON. Qual comando do pandas lê JSON corretamente?",
-                data: [
-                    { chave: "analista", valor: "\"Tibúrcio\"", tipo: "str" },
-                    { chave: "registros", valor: "1420", tipo: "int" },
-                    { chave: "valido", valor: "true", tipo: "bool" }
-                ],
-                code: "import pandas as pd\ncaminho = \"dados_tiburcio.json\"\ndf_tiburcio = ___(caminho)",
-                options: ["pd.read_json", "pd.read_csv", "pd.open_json", "json.read_csv"],
-                correct: 0,
-                hint: "O arquivo termina em .json e o prefixo do pandas é pd.read_...",
-                explanation: "Para ler arquivos JSON com pandas, usamos pd.read_json(caminho)."
-            },
-            {
-                id: 4, category: "pandas", character: "Amnésio", topic: "pd.read_csv()", scene: "table",
-                title: "Amnésio precisa estruturar os dados CSV",
-                story: "Amnésio encontrou uma tabela separada por vírgulas ('inventario_amnesio.csv') e quer carregá-la em um DataFrame estruturado df_amnesio.",
-                data: [
-                    { id: "101", setor: "Norte", qtd: "48" },
-                    { id: "102", setor: "Sul", qtd: "95" },
-                    { id: "103", setor: "Leste", qtd: "72" }
-                ],
-                code: "import pandas as pd\narquivo = \"inventario_amnesio.csv\"\ndf_amnesio = ___(arquivo)",
-                options: ["pd.read_csv", "pd.read_json", "pd.struct_csv", "csv.dataframe"],
-                correct: 0,
-                hint: "Qual função do pandas lê arquivos com extensão .csv para criar um DataFrame?",
-                explanation: "O comando pd.read_csv(arquivo) lê dados separados por vírgula e os estrutura em DataFrame."
-            },
-            {
-                id: 5, category: "pandas", character: "Tibúrcio", topic: "df_.head()", scene: "table",
-                title: "Inspecionando as 5 Primeiras Linhas de df_vendas",
-                story: "Tibúrcio carregou o DataFrame df_vendas com 50 mil linhas e quer visualizar as primeiras linhas para conferir as colunas.",
-                data: [
-                    { mes: "Jan", loja: "SP", receita: "18400" },
-                    { mes: "Fev", loja: "RJ", receita: "21900" },
-                    { mes: "Mar", loja: "MG", receita: "15300" }
-                ],
-                code: "primeiras = df_vendas.___()\nprint(primeiras)",
-                options: ["head", "top5", "first", "start"],
-                correct: 0,
-                hint: "Em inglês, 'cabeça / topo' de uma tabela DataFrame é chamado de head().",
-                explanation: "O método df_vendas.head() retorna por padrão as 5 primeiras linhas de um DataFrame."
-            },
-            {
-                id: 6, category: "pandas", character: "Genoveva", topic: "df_.dropna()", scene: "lab",
-                title: "Limpando Valores Nulos (NaN) em df_amostras",
-                story: "Na análise de laboratório de Genoveva, várias medições vieram vazias (NaN). Ela precisa remover as linhas com valores ausentes de df_amostras.",
-                data: [
-                    { tubo: "A1", ph: "7.1", pureza: "98%" },
-                    { tubo: "A2", ph: "NaN", pureza: "94%" },
-                    { tubo: "A3", ph: "6.8", pureza: "NaN" }
-                ],
-                code: "df_limpo = df_amostras.___()\nprint(len(df_limpo))",
-                options: ["dropna", "remove_null", "clean_nan", "drop_empty"],
-                correct: 0,
-                hint: "O nome do método junta 'drop' (descartar) com 'na' (valores ausentes).",
-                explanation: "Em pandas, df_amostras.dropna() descarta todas as linhas que contêm valores nulos (NaN)."
-            },
-            {
-                id: 7, category: "pandas", character: "Amnésio", topic: "df_.groupby()", scene: "table",
-                title: "Agrupando Estoque por Setor em df_estoque",
-                story: "Amnésio precisa somar a quantidade total de itens agrupando o DataFrame df_estoque pela coluna 'setor'.",
-                data: [
-                    { setor: "Norte", itens: "120", status: "OK" },
-                    { setor: "Sul", itens: "85", status: "Baixo" },
-                    { setor: "Leste", itens: "140", status: "OK" }
-                ],
-                code: "resumo = df_estoque.___(\"setor\")[\"qtd\"].sum()\nprint(resumo)",
-                options: ["groupby", "group_by", "cluster", "splitby"],
-                correct: 0,
-                hint: "No pandas, o método de agrupamento escreve-se tudo junto: groupby.",
-                explanation: "O método df_estoque.groupby(\"setor\") agrupa os registros por categoria antes de aplicar .sum()."
-            },
-            {
-                id: 8, category: "pandas", character: "Alípio", topic: "df_.describe()", scene: "rain",
-                title: "Resumo Estatístico Rápido de df_clima",
-                story: "Alípio quer calcular de uma só vez média, desvio padrão, mínimo e máximo das temperaturas registradas em df_clima.",
-                data: [
-                    { metrica: "media", temp_c: "24.6C", umidade: "71%" },
-                    { metrica: "minimo", temp_c: "16.0C", umidade: "45%" },
-                    { metrica: "maximo", temp_c: "33.2C", umidade: "92%" }
-                ],
-                code: "estatisticas = df_clima.___()\nprint(estatisticas)",
-                options: ["describe", "stats", "summary", "analyze"],
-                correct: 0,
-                hint: "Qual método em inglês 'descreve' estatisticamente todas as colunas numéricas de um DataFrame?",
-                explanation: "df_clima.describe() gera automaticamente contagem, média, desvio padrão, mínimo e máximo."
-            },
-            {
-                id: 9, category: "structures", character: "Genésio", topic: "print()", scene: "rocket",
-                title: "Painel de Ignição do Foguete",
-                story: "Genésio está na cabine e precisa exibir 'DECOLAR!' no terminal de controle para confirmar a ignição.",
-                code: "status = \"DECOLAR!\"\n___(status)",
-                options: ["print", "show", "echo", "write"],
-                correct: 0,
-                hint: "É a função clássica do Python para mostrar texto no console.",
-                explanation: "A função padrão do Python para imprimir valores na tela é print()."
-            },
-            {
-                id: 10, category: "logic", character: "Terturiano", topic: "for / range()", scene: "pulse",
-                title: "Ciclo de Compressões de Emergência",
-                story: "Para manter o ritmo, Terturiano programou um laço que repete exatamente 3 vezes a contagem de compressões.",
-                code: "for pulso in ___:\n    print(\"Compressao\", pulso)",
-                options: ["range(3)", "loop(3)", "repeat(3)", "3.times"],
-                correct: 0,
-                hint: "Em Python, geramos uma sequência numérica de 3 passos com range(...).",
-                explanation: "range(3) gera a sequência 0, 1, 2 para executar o bloco 3 vezes no for."
-            },
-            {
-                id: 11, category: "logic", character: "Eber", topic: "and", scene: "vault",
-                title: "Dupla Trava de Segurança",
-                story: "O cofre de Eber só abre quando cracha_ok E pin_ok forem verdadeiros ao mesmo tempo.",
-                code: "cracha_ok = True\npin_ok = True\nif cracha_ok ___ pin_ok:\n    cofre_aberto = True",
-                options: ["and", "or", "not", "&"],
-                correct: 0,
-                hint: "Traduza 'E' ao mesmo tempo para a palavra-chave booleana do Python.",
-                explanation: "O operador lógico and exige que ambas as condições sejam verdadeiras."
-            },
-            {
-                id: 12, category: "structures", character: "Genoveva", topic: "list.append()", scene: "lab",
-                title: "Adicionando Reagente na Lista",
-                story: "Genoveva criou a lista amostras = [\"agua\"] e quer adicionar \"ferro\" no final da lista.",
-                code: "amostras = [\"agua\"]\namostras.___(\"ferro\")",
-                options: ["append", "push", "add_end", "insert_last"],
-                correct: 0,
-                hint: "Qual método de lista em Python anexa um elemento ao final?",
-                explanation: "O método .append() adiciona um novo item ao final de uma lista em Python."
-            },
-            {
-                id: 13, category: "structures", character: "Percival", topic: "dict", scene: "lab",
-                title: "Dicionário de Tipos Sanguíneos",
-                story: "Percival guardou os tipos sanguíneos em um dicionário e quer acessar a chave \"O+\".",
-                code: "sangue = {\"O+\": 12, \"A-\": 4}\nqtd = sangue[___]",
-                options: ["\"O+\"", "key(\"O+\")", ".get(\"O+\")", "O+"],
-                correct: 0,
-                hint: "A chave no dicionário é uma string exata que representa o tipo sanguíneo.",
-                explanation: "Consultamos o valor de uma chave em um dicionário usando colchetes: sangue[\"O+\"]."
-            },
-            {
-                id: 14, category: "logic", character: "Francisnaldo", topic: "while", scene: "sub",
-                title: "Submersão até a Profundidade Alvo",
-                story: "O submarino de Francisnaldo desce enquanto a profundidade atual for menor que 200 metros.",
-                code: "profundidade = 0\n___ profundidade < 200:\n    profundidade += 50",
-                options: ["while", "until", "when", "repeat"],
-                correct: 0,
-                hint: "Qual comando repete o laço 'enquanto' uma condição for verdadeira?",
-                explanation: "O laço while repete o bloco enquanto a condição profundidade < 200 for verdadeira."
-            },
-            {
-                id: 15, category: "structures", character: "Genoveva", topic: "def", scene: "func",
-                title: "Declarando Função de Cálculo",
-                story: "Genoveva quer definir uma função chamada calcular_dose que recebe o peso do paciente.",
-                code: "___ calcular_dose(peso):\n    return peso * 2",
-                options: ["def", "function", "func", "criar"],
-                correct: 0,
-                hint: "É a palavra curta (3 letras) usada em Python para definir uma função.",
-                explanation: "Em Python, funções são declaradas com a palavra-chave def."
-            },
-            {
-                id: 16, category: "structures", character: "Percival", topic: "try / except", scene: "vault",
-                title: "Proteção contra Divisão por Zero",
-                story: "Percival tenta dividir energia por um sensor que pode valer zero sem derrubar o programa.",
-                code: "try:\n    taxa = 100 / sensor\n___ ZeroDivisionError:\n    taxa = 0",
-                options: ["except", "catch", "rescue", "error"],
-                correct: 0,
-                hint: "Após try:, o bloco que trata o erro em Python começa com qual palavra?",
-                explanation: "Para capturar exceções em Python, usamos try: junto com except ...:."
-            },
-            {
-                id: 17, category: "pandas", character: "Tibúrcio", topic: "df_.shape", scene: "table",
-                title: "Dimensões da Tabela df_log",
-                story: "Tibúrcio quer verificar rapidamente quantas linhas e colunas possui o DataFrame df_log.",
-                data: [
-                    { evento: "login", ip: "10.0.0.1", ok: "True" },
-                    { evento: "query", ip: "10.0.0.2", ok: "True" }
-                ],
-                code: "linhas, colunas = df_log.___\nprint(linhas, colunas)",
-                options: ["shape", "size_xy", "dims()", "count_rc"],
-                correct: 0,
-                hint: "É um atributo (sem parênteses) que retorna uma tupla (linhas, colunas).",
-                explanation: "O atributo df_log.shape retorna uma tupla (numero_de_linhas, numero_de_colunas)."
-            },
-            {
-                id: 18, category: "pandas", character: "Amnésio", topic: "df_.sort_values()", scene: "table",
-                title: "Ordenando df_ranking por Pontos",
-                story: "Amnésio quer ordenar o DataFrame df_ranking de acordo com os valores da coluna 'pontos'.",
-                data: [
-                    { jogador: "Ana", pontos: "900" },
-                    { jogador: "Beto", pontos: "1450" },
-                    { jogador: "Caio", pontos: "1100" }
-                ],
-                code: "ordenado = df_ranking.___(\"pontos\", ascending=False)\nprint(ordenado)",
-                options: ["sort_values", "order_by", "sort_df", "rank_values"],
-                correct: 0,
-                hint: "No pandas, ordenamos um DataFrame pelos valores de uma coluna com sort_values.",
-                explanation: "df_ranking.sort_values(\"pontos\", ascending=False) ordena do maior para o menor."
-            },
-            {
-                id: 19, category: "structures", character: "Eber", topic: "len()", scene: "vault",
-                title: "Contando Pacotes Interceptados",
-                story: "Eber armazenou os pacotes recebidos na lista pacotes e precisa saber quantos elementos existem nela.",
-                code: "pacotes = [\"pkt1\", \"pkt2\", \"pkt3\", \"pkt4\"]\ntotal = ___(pacotes)\nprint(total)",
-                options: ["len", "count", "size", "length"],
-                correct: 0,
-                hint: "É a função embutida do Python que retorna o tamanho de listas, strings ou coleções.",
-                explanation: "A função len(pacotes) retorna a quantidade total de itens na lista."
-            },
-            {
-                id: 20, category: "logic", character: "Francisnaldo", topic: "elif", scene: "sub",
-                title: "Faixas de Pressão no Sonar",
-                story: "Francisnaldo verifica se a pressão é 'alta'; se não for, testa uma segunda condição intermediária 'media' antes do else.",
-                code: "if pressao == \"alta\":\n    alerta = \"VERMELHO\"\n___ pressao == \"media\":\n    alerta = \"AMARELO\"\nelse:\n    alerta = \"VERDE\"",
-                options: ["elif", "else if", "elseif", "when"],
-                correct: 0,
-                hint: "Em Python, 'senão se' escreve-se junto em quatro letras: elif.",
-                explanation: "Usamos elif para adicionar condições intermediárias após um if inicial."
-            },
-            {
-                id: 21, category: "structures", character: "Antéria", topic: "str.upper()", scene: "sat",
-                title: "Padronizando Códigos de Satélite com Antéria",
-                story: "Antéria recebeu o sinal 'sat_alfa' em letras minúsculas e precisa convertê-lo todo para MAIÚSCULAS.",
-                code: "sinal = \"sat_alfa\"\ncodigo = sinal.___()\nprint(codigo)",
-                options: ["upper", "capitalize", "to_upper", "caps"],
-                correct: 0,
-                hint: "Em inglês, letras maiúsculas são chamadas de 'upper case'.",
-                explanation: "O método .upper() retorna uma nova string com todos os caracteres em maiúsculas."
-            },
-            {
-                id: 22, category: "structures", character: "Girúndia", topic: "sum()", scene: "factory",
-                title: "Somando Lotes de Produção",
-                story: "Girúndia quer somar todos os números da lista lotes = [12, 18, 25].",
-                code: "lotes = [12, 18, 25]\ntotal = ___(lotes)\nprint(total)",
-                options: ["sum", "total", "add_all", "count"],
-                correct: 0,
-                hint: "É a função nativa de 3 letras do Python para somar os itens de uma lista.",
-                explanation: "A função embutida sum(lotes) calcula a soma de todos os elementos da lista."
-            },
-            {
-                id: 23, category: "structures", character: "Arcídia", topic: "return", scene: "func",
-                title: "Devolvendo o Resultado da Função da Arcídia",
-                story: "Arcídia escreveu uma função para calcular o dobro de uma chave, mas esqueceu a palavra que devolve o valor.",
-                code: "def dobrar(valor):\n    ___ valor * 2",
-                options: ["return", "yields", "output", "send"],
-                correct: 0,
-                hint: "Qual palavra reservada encerra a função e retorna um resultado para quem a chamou?",
-                explanation: "Usamos return para devolver o resultado calculado dentro de uma função em Python."
-            },
-            {
-                id: 24, category: "pandas", character: "Esmeraldina", topic: "df_.columns", scene: "gems",
-                title: "Listando Nomes das Colunas de df_gemas",
-                story: "Esmeraldina abriu a tabela df_gemas e quer inspecionar os nomes de todas as colunas disponíveis.",
-                data: [
-                    { pedra: "Esmeralda", quilates: "4.2", origem: "BA" },
-                    { pedra: "Safira", quilates: "3.1", origem: "MG" },
-                    { pedra: "Rubi", quilates: "2.8", origem: "GO" }
-                ],
-                code: "nomes_colunas = df_gemas.___\nprint(nomes_colunas)",
-                options: ["columns", "headers", "cols()", "fields"],
-                correct: 0,
-                hint: "É um atributo (sem parênteses) do DataFrame que guarda o índice de colunas.",
-                explanation: "O atributo df_gemas.columns retorna os rótulos das colunas do DataFrame."
-            },
-            {
-                id: 25, category: "logic", character: "Porfília", topic: "in", scene: "vault",
-                title: "Rastreando Suspeito na Lista da Porfília",
-                story: "Porfília quer verificar se o código 'X99' está presente dentro da lista de registros suspeitos.",
-                code: "suspeitos = [\"A12\", \"X99\", \"B04\"]\nif \"X99\" ___ suspeitos:\n    print(\"Alerta encontrado!\")",
-                options: ["in", "has", "inside", "contains"],
-                correct: 0,
-                hint: "Qual operador de 2 letras verifica pertinência ('está em') dentro de uma lista Python?",
-                explanation: "O operador in verifica se um elemento pertence a uma lista, tupla, string ou dicionário."
-            }
-        ];
-
-        /* =====================================================================
-           2. ILUSTRAÇÕES SVG TEMÁTICAS POR CASO
-           ===================================================================== */
-        function buildCaseIllustration(scene, caseId) {
-            const c = Number(caseId) || 1;
-            const scenes = {
-                pulse: {
-                    tag: "MONITOR CARDÍACO",
-                    caption: "Leitura de pulso e resposta imediata no painel clínico.",
-                    svg: `<svg viewBox="0 0 160 96" class="w-full h-full"><rect x="8" y="10" width="144" height="76" rx="10" fill="#091326" stroke="#38bdf8" stroke-width="2"/><polyline points="16,54 44,54 56,28 70,70 84,42 96,54 144,54" fill="none" stroke="#34d399" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="132" cy="26" r="6" fill="#f43f5e"/></svg>`
-                },
-                rain: {
-                    tag: "CLIMA & METEOROLOGIA",
-                    caption: "Nuvens carregadas e decisão condicional antes de sair.",
-                    svg: `<svg viewBox="0 0 160 96" class="w-full h-full"><path d="M46 52a20 20 0 0 1 39-6 15 15 0 0 1 11 26H48a14 14 0 0 1-2-20z" fill="#334155" stroke="#94a3b8" stroke-width="2"/><line x1="56" y1="76" x2="50" y2="88" stroke="#38bdf8" stroke-width="3" stroke-linecap="round"/><line x1="80" y1="76" x2="74" y2="88" stroke="#38bdf8" stroke-width="3" stroke-linecap="round"/><line x1="104" y1="76" x2="98" y2="88" stroke="#38bdf8" stroke-width="3" stroke-linecap="round"/></svg>`
-                },
-                json: {
-                    tag: "ESTRUTURA JSON",
-                    caption: "Chaves e valores estruturados para leitura em DataFrame.",
-                    svg: `<svg viewBox="0 0 160 96" class="w-full h-full"><rect x="18" y="14" width="124" height="68" rx="10" fill="#111827" stroke="#818cf8" stroke-width="2"/><text x="32" y="42" fill="#a5b4fc" font-family="JetBrains Mono, monospace" font-size="18" font-weight="700">{ "id": ${c} }</text><text x="32" y="66" fill="#34d399" font-family="JetBrains Mono, monospace" font-size="13">"status": "ok"</text></svg>`
-                },
-                table: {
-                    tag: "TABELA DATAFRAME",
-                    caption: "Linhas e colunas organizadas para análise com pandas.",
-                    svg: `<svg viewBox="0 0 160 96" class="w-full h-full"><rect x="18" y="14" width="124" height="68" rx="8" fill="#0f172a" stroke="#38bdf8" stroke-width="2"/><line x1="18" y1="36" x2="142" y2="36" stroke="#38bdf8" stroke-width="2"/><line x1="18" y1="58" x2="142" y2="58" stroke="#1e293b" stroke-width="2"/><line x1="60" y1="14" x2="60" y2="82" stroke="#334155" stroke-width="2"/><line x1="102" y1="14" x2="102" y2="82" stroke="#334155" stroke-width="2"/></svg>`
-                },
-                lab: {
-                    tag: "BANCADA DE AMOSTRAS",
-                    caption: "Tubos de ensaio, coleções e registros de laboratório.",
-                    svg: `<svg viewBox="0 0 160 96" class="w-full h-full"><rect x="38" y="18" width="18" height="58" rx="9" fill="#0f172a" stroke="#34d399" stroke-width="2"/><rect x="40" y="46" width="14" height="28" rx="6" fill="#10b981" opacity="0.55"/><rect x="71" y="18" width="18" height="58" rx="9" fill="#0f172a" stroke="#38bdf8" stroke-width="2"/><rect x="73" y="38" width="14" height="36" rx="6" fill="#0ea5e9" opacity="0.55"/><rect x="104" y="18" width="18" height="58" rx="9" fill="#0f172a" stroke="#fbbf24" stroke-width="2"/><rect x="106" y="52" width="14" height="22" rx="6" fill="#f59e0b" opacity="0.55"/></svg>`
-                },
-                rocket: {
-                    tag: "CONTROLE DE LANÇAMENTO",
-                    caption: "Telemetria e comandos de saída no painel da missão.",
-                    svg: `<svg viewBox="0 0 160 96" class="w-full h-full"><polygon points="80,14 98,48 88,68 72,68 62,48" fill="#e2e8f0" stroke="#818cf8" stroke-width="2"/><circle cx="80" cy="44" r="7" fill="#38bdf8"/><polygon points="62,56 48,72 66,68" fill="#f97316"/><polygon points="98,56 112,72 94,68" fill="#f97316"/><polygon points="73,70 80,88 87,70" fill="#facc15"/></svg>`
-                },
-                vault: {
-                    tag: "TRAVA DE SEGURANÇA",
-                    caption: "Verificação de condições lógicas e integridade de execução.",
-                    svg: `<svg viewBox="0 0 160 96" class="w-full h-full"><rect x="52" y="42" width="56" height="40" rx="8" fill="#1e293b" stroke="#fbbf24" stroke-width="2.5"/><path d="M62 42V30a18 18 0 0 1 36 0v12" fill="none" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"/><circle cx="80" cy="62" r="5" fill="#fbbf24"/></svg>`
-                },
-                sub: {
-                    tag: "SONAR SUBMARINO",
-                    caption: "Navegação em profundidade e leitura de faixas de pressão.",
-                    svg: `<svg viewBox="0 0 160 96" class="w-full h-full"><rect x="34" y="40" width="84" height="26" rx="13" fill="#0f172a" stroke="#22d3ee" stroke-width="2.5"/><line x1="76" y1="40" x2="76" y2="20" stroke="#22d3ee" stroke-width="2.5"/><line x1="76" y1="20" x2="90" y2="20" stroke="#22d3ee" stroke-width="2.5"/><circle cx="128" cy="53" r="10" fill="none" stroke="#22d3ee" stroke-width="1.5" opacity="0.6"/><circle cx="128" cy="53" r="18" fill="none" stroke="#22d3ee" stroke-width="1.5" opacity="0.35"/></svg>`
-                },
-                func: {
-                    tag: "BLOCO DE FUNÇÃO",
-                    caption: "Encapsulamento de regras e retorno de valores em Python.",
-                    svg: `<svg viewBox="0 0 160 96" class="w-full h-full"><rect x="24" y="18" width="112" height="60" rx="10" fill="#0f172a" stroke="#c084fc" stroke-width="2"/><text x="36" y="45" fill="#e9d5ff" font-family="JetBrains Mono, monospace" font-size="14" font-weight="700">def fn(x):</text><text x="36" y="66" fill="#34d399" font-family="JetBrains Mono, monospace" font-size="13">  return res</text></svg>`
-                },
-                sat: {
-                    tag: "TELEMETRIA ORBITAL",
-                    caption: "Padronização de sinais e códigos vindos da órbita.",
-                    svg: `<svg viewBox="0 0 160 96" class="w-full h-full"><rect x="64" y="34" width="32" height="24" rx="5" fill="#1e293b" stroke="#38bdf8" stroke-width="2"/><rect x="22" y="28" width="32" height="16" rx="3" fill="#1d4ed8" stroke="#93c5fd" stroke-width="1.5"/><rect x="106" y="48" width="32" height="16" rx="3" fill="#1d4ed8" stroke="#93c5fd" stroke-width="1.5"/><path d="M116 74q16-14 28 0" fill="none" stroke="#34d399" stroke-width="2" stroke-linecap="round"/></svg>`
-                },
-                factory: {
-                    tag: "LINHA DE LOTES",
-                    caption: "Contagem e soma de lotes produzidos na operação.",
-                    svg: `<svg viewBox="0 0 160 96" class="w-full h-full"><rect x="26" y="46" width="24" height="24" rx="4" fill="#312e81" stroke="#818cf8" stroke-width="2"/><rect x="68" y="46" width="24" height="24" rx="4" fill="#312e81" stroke="#818cf8" stroke-width="2"/><rect x="110" y="46" width="24" height="24" rx="4" fill="#312e81" stroke="#818cf8" stroke-width="2"/><line x1="16" y1="74" x2="144" y2="74" stroke="#64748b" stroke-width="3" stroke-linecap="round"/></svg>`
-                },
-                gems: {
-                    tag: "CATÁLOGO DE GEMAS",
-                    caption: "Inspeção de atributos e colunas de inventário.",
-                    svg: `<svg viewBox="0 0 160 96" class="w-full h-full"><polygon points="80,18 114,42 80,80 46,42" fill="#064e3b" stroke="#34d399" stroke-width="2.5"/><polyline points="46,42 80,52 114,42" fill="none" stroke="#6ee7b7" stroke-width="1.8"/><line x1="80" y1="18" x2="80" y2="80" stroke="#6ee7b7" stroke-width="1.5"/></svg>`
-                }
+                streak: 0,
+                bestStreak: 0,
+                timeLeft: 25,
+                hintUsed: false,
+                answered: false
             };
-            return scenes[scene] || scenes.func;
+
+            showScreen("screen-game");
+            renderLiveRoomScoreboard(null);
+            renderCurrentQuestion();
         }
 
-        /* =====================================================================
-           3. CRIADOR E RENDERIZADOR DE AVATAR PERSONALIZADO (LOCALSTORAGE)
-           ===================================================================== */
-        const AVATAR_STORAGE_KEY = "pyquest_user_avatar_v1";
-        const AVATAR_THEMES = {
-            indigo: { bg: "#1e1b4b", stroke: "#818cf8", accent: "#38bdf8", eye: "#e0e7ff" },
-            emerald: { bg: "#064e3b", stroke: "#34d399", accent: "#a7f3d0", eye: "#ecfdf5" },
-            amber: { bg: "#451a03", stroke: "#fbbf24", accent: "#fde68a", eye: "#fffbeb" },
-            rose: { bg: "#4c0519", stroke: "#fb7185", accent: "#f472b6", eye: "#ffe4e6" }
-        };
-
-        let userAvatar = {
-            style: "bot",
-            theme: "indigo",
-            gear: "antenna"
-        };
-
-        function buildAvatarSvg(cfg = userAvatar) {
-            const t = AVATAR_THEMES[cfg.theme] || AVATAR_THEMES.indigo;
-            let gearSvg = "";
-            if (cfg.gear === "antenna") {
-                gearSvg = `<line x1="48" y1="22" x2="48" y2="10" stroke="${t.accent}" stroke-width="3" stroke-linecap="round"/><circle cx="48" cy="9" r="4" fill="${t.accent}"/>`;
-            } else if (cfg.gear === "crown") {
-                gearSvg = `<polygon points="28,22 35,11 48,18 61,11 68,22" fill="#fbbf24" stroke="#f59e0b" stroke-width="1.5"/>`;
-            } else if (cfg.gear === "spark") {
-                gearSvg = `<polygon points="76,12 79,19 86,22 79,25 76,32 73,25 66,22 73,19" fill="${t.accent}"/>`;
+        function runPinRoomSelfCheck() {
+            const testPin = "991234";
+            const testRoom = {
+                pin: testPin,
+                status: "waiting",
+                host_name: "TesteAuto",
+                players: [{ id: "p_test", name: "TesteAuto", score: 250 }],
+                current_question: 0
+            };
+            writeCachedRoom(testRoom);
+            const readBack = readCachedRoom(testPin);
+            if (!readBack || normalizePin(readBack.pin) !== testPin || !Array.isArray(readBack.players)) {
+                showToast("Aviso: armazenamento local de PIN indisponível neste navegador.");
             }
-
-            let faceSvg = "";
-            if (cfg.style === "visor") {
-                faceSvg = `
-                    <rect x="24" y="24" width="48" height="48" rx="14" fill="${t.bg}" stroke="${t.stroke}" stroke-width="3"/>
-                    <rect x="29" y="38" width="38" height="14" rx="7" fill="${t.accent}" opacity="0.28" stroke="${t.accent}" stroke-width="2"/>
-                    <circle cx="40" cy="45" r="3.5" fill="${t.eye}"/>
-                    <circle cx="56" cy="45" r="3.5" fill="${t.eye}"/>
-                    <line x1="38" y1="61" x2="58" y2="61" stroke="${t.stroke}" stroke-width="2.5" stroke-linecap="round"/>
-                `;
-            } else if (cfg.style === "cat") {
-                faceSvg = `
-                    <polygon points="26,34 30,18 42,27" fill="${t.bg}" stroke="${t.stroke}" stroke-width="2.5"/>
-                    <polygon points="70,34 66,18 54,27" fill="${t.bg}" stroke="${t.stroke}" stroke-width="2.5"/>
-                    <rect x="24" y="26" width="48" height="46" rx="18" fill="${t.bg}" stroke="${t.stroke}" stroke-width="3"/>
-                    <circle cx="39" cy="46" r="4" fill="${t.eye}"/>
-                    <circle cx="57" cy="46" r="4" fill="${t.eye}"/>
-                    <polygon points="48,51 44,55 52,55" fill="${t.accent}"/>
-                    <path d="M40 60q8 6 16 0" fill="none" stroke="${t.accent}" stroke-width="2.2" stroke-linecap="round"/>
-                `;
-            } else if (cfg.style === "fox") {
-                faceSvg = `
-                    <polygon points="24,36 28,16 44,27" fill="${t.bg}" stroke="${t.stroke}" stroke-width="2.5"/>
-                    <polygon points="72,36 68,16 52,27" fill="${t.bg}" stroke="${t.stroke}" stroke-width="2.5"/>
-                    <polygon points="48,26 74,44 48,74 22,44" fill="${t.bg}" stroke="${t.stroke}" stroke-width="3"/>
-                    <circle cx="39" cy="46" r="3.5" fill="${t.eye}"/>
-                    <circle cx="57" cy="46" r="3.5" fill="${t.eye}"/>
-                    <circle cx="48" cy="56" r="3.5" fill="${t.accent}"/>
-                `;
-            } else {
-                faceSvg = `
-                    <rect x="24" y="24" width="48" height="48" rx="14" fill="${t.bg}" stroke="${t.stroke}" stroke-width="3"/>
-                    <circle cx="39" cy="45" r="4.5" fill="${t.accent}"/>
-                    <circle cx="57" cy="45" r="4.5" fill="${t.accent}"/>
-                    <rect x="37" y="57" width="22" height="6" rx="3" fill="${t.eye}"/>
-                `;
-            }
-
-            return `<svg viewBox="0 0 96 96" class="w-full h-full">${gearSvg}${faceSvg}</svg>`;
-        }
-
-        function renderAllAvatars() {
-            const svg = buildAvatarSvg(userAvatar);
-            const nameVal = (document.getElementById("player-name")?.value || "Jogador Py").trim() || "Jogador Py";
-            const badge = document.getElementById("header-avatar-badge");
-            const preview = document.getElementById("home-avatar-preview");
-            const previewName = document.getElementById("home-avatar-name");
-            const hudAv = document.getElementById("hud-avatar");
-            const resAv = document.getElementById("result-avatar");
-
-            if (badge) badge.innerHTML = svg;
-            if (preview) preview.innerHTML = svg;
-            if (previewName) previewName.textContent = nameVal;
-            if (hudAv) hudAv.innerHTML = svg;
-            if (resAv) resAv.innerHTML = svg;
-        }
-
-        function saveUserAvatar() {
             try {
-                localStorage.setItem(AVATAR_STORAGE_KEY, JSON.stringify(userAvatar));
+                localStorage.removeItem("pyquest_room_" + testPin);
             } catch (_) {}
         }
 
-        function loadUserAvatar() {
-            try {
-                const raw = localStorage.getItem(AVATAR_STORAGE_KEY);
-                if (raw) {
-                    const parsed = JSON.parse(raw);
-                    userAvatar = {
-                        style: ["bot", "visor", "cat", "fox"].includes(parsed.style) ? parsed.style : "bot",
-                        theme: AVATAR_THEMES[parsed.theme] ? parsed.theme : "indigo",
-                        gear: ["antenna", "crown", "spark", "none"].includes(parsed.gear) ? parsed.gear : "antenna"
-                    };
-                }
-            } catch (_) {}
-            const styleEl = document.getElementById("avatar-style");
-            const themeEl = document.getElementById("avatar-theme");
-            const gearEl = document.getElementById("avatar-gear");
-            if (styleEl) styleEl.value = userAvatar.style;
-            if (themeEl) themeEl.value = userAvatar.theme;
-            if (gearEl) gearEl.value = userAvatar.gear;
+        function showScreen(screenId) {
+            ["screen-home", "screen-join", "screen-game", "screen-result"].forEach((id) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                if (id === screenId) el.classList.remove("hidden");
+                else el.classList.add("hidden");
+            });
+            const btnHome = document.getElementById("btn-home");
+            if (btnHome) {
+                if (screenId === "screen-home") btnHome.classList.add("hidden");
+                else btnHome.classList.remove("hidden");
+            }
             renderAllAvatars();
         }
 
-        function updateAvatarFromControls() {
-            userAvatar = {
-                style: document.getElementById("avatar-style")?.value || "bot",
-                theme: document.getElementById("avatar-theme")?.value || "indigo",
-                gear: document.getElementById("avatar-gear")?.value || "antenna"
-            };
-            saveUserAvatar();
-            renderAllAvatars();
-            SoundFX.click();
+        function returnHome() {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+            stopRoomPolling();
+            showScreen("screen-home");
         }
-
-        function randomizeAvatar() {
-            const styles = ["bot", "visor", "cat", "fox"];
-            const themes = Object.keys(AVATAR_THEMES);
-            const gears = ["antenna", "crown", "spark", "none"];
-            userAvatar = {
-                style: styles[Math.floor(Math.random() * styles.length)],
-                theme: themes[Math.floor(Math.random() * themes.length)],
-                gear: gears[Math.floor(Math.random() * gears.length)]
-            };
-            const styleEl = document.getElementById("avatar-style");
-            const themeEl = document.getElementById("avatar-theme");
-            const gearEl = document.getElementById("avatar-gear");
-            if (styleEl) styleEl.value = userAvatar.style;
-            if (themeEl) themeEl.value = userAvatar.theme;
-            if (gearEl) gearEl.value = userAvatar.gear;
-            saveUserAvatar();
-            renderAllAvatars();
-            SoundFX.hint();
-        }
-
-        function syncAvatarName() {
-            renderAllAvatars();
-        }
-
-        /* =====================================================================
-           4. MOTOR DE ÁUDIO: TRILHA ÚNICA POR CASO + EFEITOS SONOROS WEB AUDIO
-           ===================================================================== */
-        const SoundFX = (() => {
-            let ctx = null;
-            let enabled = true;
-            let bgTimer = null;
-            let stepIndex = 0;
-            let activeTrackProfile = null;
-            const audioEl = new Audio();
-            audioEl.loop = true;
-            audioEl.volume = 0.25;
-
-            function ensureCtx() {
-                if (!enabled) return null;
-                if (!ctx) {
-                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-                    if (AudioCtx) {
-                        ctx = new AudioCtx();
-                    }
-                }
-                if (ctx && ctx.state === "suspended") {
-                    ctx.resume().catch(() => {});
-                }
-                return ctx;
-            }
-
-            function buildTrackProfileForCase(caseObj, index) {
-                const trackName = CHAT_AUDIO_TRACKS[index % CHAT_AUDIO_TRACKS.length];
-                const seed = ((caseObj?.id || (index + 1)) * 7919 + index * 131) % 997;
-                const scales = [
-                    [261.63, 293.66, 329.63, 392.00, 440.00, 523.25],
-                    [293.66, 349.23, 392.00, 440.00, 523.25, 587.33],
-                    [329.63, 392.00, 440.00, 493.88, 587.33, 659.25],
-                    [220.00, 261.63, 293.66, 329.63, 392.00, 440.00],
-                    [349.23, 392.00, 440.00, 523.25, 587.33, 698.46]
-                ];
-                const waveTypes = ["triangle", "square", "sine", "sawtooth"];
-                const scale = scales[seed % scales.length];
-                const pattern = Array.from({ length: 8 }, (_, i) => scale[(seed + i * 3) % scale.length]);
-                const tempoMs = 190 + (seed % 7) * 28;
-                return {
-                    caseId: caseObj?.id || (index + 1),
-                    trackName,
-                    pattern,
-                    tempoMs,
-                    wave: waveTypes[seed % waveTypes.length]
-                };
-            }
-
-            function playBgStep() {
-                if (!enabled || !activeTrackProfile) return;
-                const c = ensureCtx();
-                if (!c) return;
-                try {
-                    const freq = activeTrackProfile.pattern[stepIndex % activeTrackProfile.pattern.length];
-                    stepIndex += 1;
-                    const now = c.currentTime;
-                    const osc = c.createOscillator();
-                    const gain = c.createGain();
-                    osc.type = activeTrackProfile.wave;
-                    osc.frequency.setValueAtTime(freq, now);
-                    gain.gain.setValueAtTime(0.0001, now);
-                    gain.gain.exponentialRampToValueAtTime(0.022, now + 0.02);
-                    gain.gain.exponentialRampToValueAtTime(0.0001, now + (activeTrackProfile.tempoMs / 1000) * 0.85);
-                    osc.connect(gain);
-                    gain.connect(c.destination);
-                    osc.start(now);
-                    osc.stop(now + (activeTrackProfile.tempoMs / 1000) * 0.9);
-                } catch (_) {}
-            }
-
-            function startBgLoop() {
-                if (bgTimer) {
-                    clearInterval(bgTimer);
-                    bgTimer = null;
-                }
-                if (!enabled || !activeTrackProfile) return;
-                bgTimer = setInterval(playBgStep, activeTrackProfile.tempoMs);
-            }
-
-            function playCaseMusic(caseObj, index) {
-                activeTrackProfile = buildTrackProfileForCase(caseObj, index);
-                stepIndex = 0;
-                const label = `Caso #${activeTrackProfile.caseId}: ${activeTrackProfile.trackName}`;
-                const hudTrack = document.getElementById("hud-track");
-                const pill = document.getElementById("now-playing-pill");
-                if (hudTrack) hudTrack.textContent = label;
-                if (pill) pill.textContent = `♪ ${label}`;
-
-                if (!enabled) {
-                    audioEl.pause();
-                    return;
-                }
-
-                startBgLoop();
-
-                try {
-                    audioEl.src = encodeURI(activeTrackProfile.trackName);
-                    const p = audioEl.play();
-                    if (p && typeof p.catch === "function") {
-                        p.catch(() => {});
-                    }
-                } catch (_) {}
-            }
-
-            function stopMusic() {
-                if (bgTimer) {
-                    clearInterval(bgTimer);
-                    bgTimer = null;
-                }
-                try {
-                    audioEl.pause();
-                } catch (_) {}
-            }
-
-            function setEnabled(val) {
-                enabled = Boolean(val);
-                if (!enabled) {
-                    stopMusic();
-                } else if (activeTrackProfile) {
-                    ensureCtx();
-                    startBgLoop();
-                    try {
-                        const p = audioEl.play();
-                        if (p && typeof p.catch === "function") p.catch(() => {});
-                    } catch (_) {}
-                }
-            }
-
-            function isEnabled() {
-                return enabled;
-            }
-
-            function tone(freq, duration, type = "sine", vol = 0.08, delay = 0) {
-                if (!enabled) return;
-                const c = ensureCtx();
-                if (!c) return;
-                try {
-                    const now = c.currentTime + delay;
-                    const osc = c.createOscillator();
-                    const gain = c.createGain();
-                    osc.type = type;
-                    osc.frequency.setValueAtTime(freq, now);
-                    gain.gain.setValueAtTime(0.0001, now);
-                    gain.gain.exponentialRampToValueAtTime(vol, now + 0.015);
-                    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-                    osc.connect(gain);
-                    gain.connect(c.destination);
-                    osc.start(now);
-                    osc.stop(now + duration + 0.02);
-                } catch (_) {}
-            }
-
-            return {
-                ensureCtx,
-                playCaseMusic,
-                stopMusic,
-                setEnabled,
-                isEnabled,
-                click: () => tone(520, 0.07, "triangle", 0.06, 0),
-                hint: () => {
-                    tone(660, 0.08, "sine", 0.06, 0);
-                    tone(880, 0.12, "sine", 0.06, 0.08);
-                },
-                correct: () => {
-                    tone(523.25, 0.1, "triangle", 0.09, 0);
-                    tone(659.25, 0.1, "triangle", 0.09, 0.08);
-                    tone(783.99, 0.18, "triangle", 0.1, 0.16);
-                },
-                wrong: () => {
-                    tone(240, 0.14, "sawtooth", 0.07, 0);
-                    tone(175, 0.22, "sawtooth", 0.07, 0.11);
-                },
-                finish: () => {
-                    tone(523.25, 0.12, "triangle", 0.08, 0);
-                    tone(659.25, 0.12, "triangle", 0.08, 0.11);
-                    tone(783.99, 0.12, "triangle", 0.08, 0.22);
-                    tone(1046.5, 0.26, "triangle", 0.09, 0.33);
-                }
-            };
-        })();
-
-        /* =====================================================================
-           5. ESTADO DO JOGO, ATALHOS DE TECLADO E PLACAR LOCAL + SUPABASE
-           ===================================================================== */
-        const LEADERBOARD_KEY = "pyquest_leaderboard_v1";
-        const OPTION_LABELS = ["1", "2", "3", "4"];
-        const OPTION_STYLES = [
-            "bg-rose-600/90 hover:bg-rose-500 border-rose-400/40 text-white",
-            "bg-sky-600/90 hover:bg-sky-500 border-sky-400/40 text-white",
-            "bg-amber-500/90 hover:bg-amber-400 border-amber-300/40 text-slate-950",
-            "bg-emerald-600/90 hover:bg-emerald-500 border-emerald-400/40 text-white"
-        ];
-
-        let currentMode = "solo";
-        let currentRoomPin = "";
-        let timerInterval = null;
-        let gameState = {
-            questions: [],
-            currentIndex: 0,
-            score: 0,
-            correctCount: 0,
-            streak: 0,
-            maxStreak: 0,
-            timeLeft: 25,
-            hintUsed: false,
-            answered: false,
-            currentCorrectIdx: 0
-        };
 
         function showToast(msg) {
             const box = document.getElementById("toast-box");
@@ -1330,453 +1407,488 @@
             if (box) box.classList.add("hidden");
         }
 
-        function showScreen(screenId) {
-            ["screen-home", "screen-join", "screen-game", "screen-result"].forEach((id) => {
-                const el = document.getElementById(id);
-                if (el) {
-                    el.classList.toggle("hidden", id !== screenId);
+        const SoundFX = {
+            ctx: null,
+            bgmTimer: null,
+            bgmStep: 0,
+            bgmActive: false,
+            tracks: [
+                { name: "Neon Orbit 8-Bit", tempo: 175, notes: [261.63, 329.63, 392.0, 523.25, 392.0, 329.63, 293.66, 392.0, 440.0, 523.25, 440.0, 349.23, 329.63, 392.0, 293.66, 246.94] },
+                { name: "Cyber Lab Groove", tempo: 165, notes: [220.0, 261.63, 329.63, 440.0, 392.0, 329.63, 261.63, 293.66, 349.23, 440.0, 523.25, 440.0, 392.0, 329.63, 293.66, 246.94] },
+                { name: "Dataframe Rush", tempo: 150, notes: [293.66, 349.23, 440.0, 587.33, 523.25, 440.0, 349.23, 329.63, 392.0, 493.88, 587.33, 493.88, 440.0, 392.0, 329.63, 261.63] }
+            ],
+            currentTrackIdx: 0,
+            ensureCtx() {
+                if (!soundEnabled) return null;
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                if (!AudioCtx) return null;
+                if (!this.ctx) {
+                    try { this.ctx = new AudioCtx(); } catch (_) { return null; }
                 }
-            });
-            const homeBtn = document.getElementById("btn-home");
-            if (homeBtn) {
-                homeBtn.classList.toggle("hidden", screenId === "screen-home");
+                if (this.ctx && this.ctx.state === "suspended") {
+                    this.ctx.resume().catch(() => {});
+                }
+                return this.ctx;
+            },
+            tone(freq, duration = 0.12, type = "sine", gainVal = 0.05) {
+                const ctx = this.ensureCtx();
+                if (!ctx) return;
+                try {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = type;
+                    osc.frequency.setValueAtTime(freq, ctx.currentTime);
+                    gain.gain.setValueAtTime(gainVal, ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start();
+                    osc.stop(ctx.currentTime + duration);
+                } catch (_) {}
+            },
+            startMusic(trackSeed = 0) {
+                if (!soundEnabled) return;
+                const ctx = this.ensureCtx();
+                if (!ctx) return;
+                this.currentTrackIdx = Math.abs(Number(trackSeed || 0)) % this.tracks.length;
+                const track = this.tracks[this.currentTrackIdx];
+                const pill = document.getElementById("now-playing-pill");
+                if (pill) pill.textContent = `♪ ${track.name}`;
+                if (this.bgmTimer) {
+                    clearInterval(this.bgmTimer);
+                    this.bgmTimer = null;
+                }
+                this.bgmActive = true;
+                this.bgmTimer = setInterval(() => {
+                    if (!soundEnabled || !this.bgmActive) return;
+                    const activeCtx = this.ensureCtx();
+                    if (!activeCtx || activeCtx.state !== "running") return;
+                    const t = this.tracks[this.currentTrackIdx];
+                    const note = t.notes[this.bgmStep % t.notes.length];
+                    this.tone(note, 0.14, "triangle", 0.022);
+                    if (this.bgmStep % 4 === 0) {
+                        this.tone(note / 2, 0.18, "sine", 0.03);
+                    }
+                    this.bgmStep += 1;
+                }, track.tempo);
+            },
+            stopMusic() {
+                this.bgmActive = false;
+                if (this.bgmTimer) {
+                    clearInterval(this.bgmTimer);
+                    this.bgmTimer = null;
+                }
+            },
+            correct() {
+                this.tone(587.33, 0.1, "triangle", 0.06);
+                setTimeout(() => this.tone(880, 0.16, "triangle", 0.06), 90);
+            },
+            wrong() {
+                this.tone(220, 0.14, "sawtooth", 0.05);
+                setTimeout(() => this.tone(164.81, 0.2, "sawtooth", 0.05), 110);
+            },
+            hint() {
+                this.tone(660, 0.12, "sine", 0.05);
+            },
+            finish() {
+                this.stopMusic();
+                [523.25, 659.25, 783.99, 1046.5].forEach((f, idx) => {
+                    setTimeout(() => this.tone(f, 0.15, "triangle", 0.06), idx * 100);
+                });
             }
-            if (screenId !== "screen-game" && timerInterval) {
+        };
+
+        function toggleSound() {
+            soundEnabled = !soundEnabled;
+            const icon = document.getElementById("sound-icon");
+            const label = document.getElementById("sound-label");
+            const pill = document.getElementById("now-playing-pill");
+            if (icon) icon.textContent = soundEnabled ? "🔊" : "🔇";
+            if (label) label.textContent = soundEnabled ? "Som: Ligado" : "Som: Mudo";
+            if (soundEnabled) {
+                SoundFX.startMusic(gameState ? gameState.index : 0);
+            } else {
+                SoundFX.stopMusic();
+                if (pill) pill.textContent = "♪ Som Silenciado";
+            }
+        }
+
+        function updateHudStats() {
+            if (!gameState) return;
+            const total = gameState.deck.length || 1;
+            const nameEl = document.getElementById("hud-name");
+            const badgeEl = document.getElementById("hud-mode-badge");
+            const qNumEl = document.getElementById("hud-q-num");
+            const qTotEl = document.getElementById("hud-q-total");
+            const trackEl = document.getElementById("hud-track");
+            const timerEl = document.getElementById("hud-timer");
+            const streakEl = document.getElementById("hud-streak");
+            const scoreEl = document.getElementById("hud-score");
+            const barEl = document.getElementById("hud-progress-bar");
+
+            const c = gameState.deck[gameState.index];
+            if (nameEl) nameEl.textContent = gameState.playerName;
+            if (badgeEl) badgeEl.textContent = currentMode === "room" && currentRoomPin ? `SALA ${currentRoomPin}` : "SOLO";
+            if (qNumEl) qNumEl.textContent = String(gameState.index + 1);
+            if (qTotEl) qTotEl.textContent = String(total);
+            if (trackEl) trackEl.textContent = c ? `${c.character} • ${c.topic}` : "-";
+            if (timerEl) {
+                timerEl.textContent = `${gameState.timeLeft}s`;
+                timerEl.className = `font-mono text-lg sm:text-xl font-black leading-tight ${
+                    gameState.timeLeft <= 6 ? "text-rose-400" : gameState.timeLeft <= 12 ? "text-amber-300" : "text-emerald-400"
+                }`;
+            }
+            if (streakEl) streakEl.textContent = `${gameState.streak}x`;
+            if (scoreEl) scoreEl.textContent = String(gameState.score);
+            if (barEl) {
+                const pct = Math.round(((gameState.index + (gameState.answered ? 1 : 0)) / total) * 100);
+                barEl.style.width = `${pct}%`;
+            }
+        }
+
+        function startQuestionTimer() {
+            if (timerInterval) {
                 clearInterval(timerInterval);
                 timerInterval = null;
             }
-        }
-
-        function returnHome() {
-            SoundFX.click();
-            SoundFX.stopMusic();
-            const pill = document.getElementById("now-playing-pill");
-            if (pill) pill.textContent = "♪ Trilha Pronta";
-            showScreen("screen-home");
-        }
-
-        function toggleSound() {
-            const next = !SoundFX.isEnabled();
-            SoundFX.setEnabled(next);
-            const icon = document.getElementById("sound-icon");
-            const label = document.getElementById("sound-label");
-            if (icon) icon.textContent = next ? "🔊" : "🔇";
-            if (label) label.textContent = next ? "Som: Ligado" : "Som: Mudo";
-            if (next) SoundFX.click();
-        }
-
-        function shuffleArray(arr) {
-            const copy = [...arr];
-            for (let i = copy.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [copy[i], copy[j]] = [copy[j], copy[i]];
-            }
-            return copy;
-        }
-
-        function buildQuestionDeck() {
-            const category = document.getElementById("category-filter")?.value || "all";
-            const lengthVal = document.getElementById("session-length")?.value || "all";
-            const filtered = category === "all"
-                ? [...CASOS_PYTHON_WEB]
-                : CASOS_PYTHON_WEB.filter((q) => q.category === category);
-            const base = filtered.length ? filtered : [...CASOS_PYTHON_WEB];
-            const shuffled = shuffleArray(base);
-            if (lengthVal === "all") return shuffled;
-            const limit = Math.max(1, Math.min(shuffled.length, Number(lengthVal) || shuffled.length));
-            return shuffled.slice(0, limit);
-        }
-
-        const CASOS_PYTHON_WEB = CASES;
-
-        async function openCreateRoomView() {
-            SoundFX.click();
-            currentMode = "room";
-            currentRoomPin = String(Math.floor(100000 + Math.random() * 900000));
-            document.getElementById("room-modal-title").textContent = "Criar Sala por PIN";
-            document.getElementById("create-room-panel").classList.remove("hidden");
-            document.getElementById("join-room-panel").classList.add("hidden");
-            document.getElementById("generated-pin-display").textContent = currentRoomPin;
-            showScreen("screen-join");
-            await subscribeToRoomPin(currentRoomPin);
-            await upsertPlayerInRoom(currentRoomPin, { status: "waiting", score: 0, correct: 0, streak: 0, current_question: 0 });
-        }
-
-        async function openJoinRoomView() {
-            SoundFX.click();
-            currentMode = "room";
-            document.getElementById("room-modal-title").textContent = "Entrar com PIN";
-            document.getElementById("create-room-panel").classList.add("hidden");
-            document.getElementById("join-room-panel").classList.remove("hidden");
-            showScreen("screen-join");
-        }
-
-        function copyRoomPin() {
-            if (!currentRoomPin) return;
-            try {
-                if (navigator.clipboard && navigator.clipboard.writeText) {
-                    navigator.clipboard.writeText(currentRoomPin).catch(() => {});
-                }
-            } catch (_) {}
-            showToast(`PIN ${currentRoomPin} copiado! Envie para quem vai jogar com você.`);
-        }
-
-        async function startRoomGame() {
-            const joinPanel = document.getElementById("join-room-panel");
-            if (joinPanel && !joinPanel.classList.contains("hidden")) {
-                const typedPin = (document.getElementById("room-pin-input")?.value || "").trim().toUpperCase();
-                if (!typedPin) {
-                    showToast("Digite um PIN para entrar na sala.");
+            if (!gameState) return;
+            gameState.timeLeft = 25;
+            updateHudStats();
+            timerInterval = setInterval(() => {
+                if (!gameState || gameState.answered) {
+                    clearInterval(timerInterval);
+                    timerInterval = null;
                     return;
                 }
-                currentRoomPin = typedPin;
-                await subscribeToRoomPin(currentRoomPin);
-            }
-            hideToast();
-            await beginMatch("room");
+                gameState.timeLeft = Math.max(0, gameState.timeLeft - 1);
+                updateHudStats();
+                if (gameState.timeLeft === 0) {
+                    clearInterval(timerInterval);
+                    timerInterval = null;
+                    selectAnswer(-1, true);
+                }
+            }, 1000);
         }
 
-        async function startSoloGame() {
-            hideToast();
-            currentRoomPin = "";
-            await beginMatch("solo");
-        }
-
-        async function replayCurrentMode() {
-            await beginMatch(currentMode);
-        }
-
-        async function beginMatch(mode) {
-            currentMode = mode;
-            SoundFX.ensureCtx();
-            SoundFX.click();
-
-            gameState = {
-                questions: buildQuestionDeck(),
-                currentIndex: 0,
-                score: 0,
-                correctCount: 0,
-                streak: 0,
-                maxStreak: 0,
-                timeLeft: 25,
-                hintUsed: false,
-                answered: false,
-                currentCorrectIdx: 0
-            };
-
-            const nameVal = (document.getElementById("player-name")?.value || "Jogador Py").trim() || "Jogador Py";
-            document.getElementById("hud-name").textContent = nameVal;
-            document.getElementById("hud-mode-badge").textContent = mode === "room" ? `SALA ${currentRoomPin || ""}` : "SOLO";
-            document.getElementById("hud-q-total").textContent = String(gameState.questions.length);
-            renderAllAvatars();
-
-            if (mode === "room" && currentRoomPin) {
-                await subscribeToRoomPin(currentRoomPin);
-                await upsertPlayerInRoom(currentRoomPin, {
-                    status: "playing",
-                    score: 0,
-                    correct: 0,
-                    streak: 0,
-                    current_question: 0
-                });
-            } else {
-                renderRoomPlayersUI(null);
-            }
-
-            showScreen("screen-game");
-            loadQuestion();
-        }
-
-        function renderDataSample(rows) {
-            const wrap = document.getElementById("q-data-wrap");
-            const table = document.getElementById("q-data-table");
-            if (!rows || !rows.length) {
-                wrap.classList.add("hidden");
-                table.innerHTML = "";
-                return;
-            }
-            const cols = Object.keys(rows[0]);
-            const thead = `<thead><tr class="text-indigo-300 border-b border-slate-800">${cols.map((c) => `<th class="py-1 pr-3">${escapeHtml(c)}</th>`).join("")}</tr></thead>`;
-            const tbody = `<tbody>${rows.map((r) => `<tr class="border-b border-slate-900/80 text-slate-200">${cols.map((c) => `<td class="py-1 pr-3">${escapeHtml(String(r[c] ?? ""))}</td>`).join("")}</tr>`).join("")}</tbody>`;
-            table.innerHTML = thead + tbody;
-            wrap.classList.remove("hidden");
-        }
-
-        function escapeHtml(str) {
-            return String(str)
-                .replaceAll("&", "&amp;")
-                .replaceAll("<", "&lt;")
-                .replaceAll(">", "&gt;")
-                .replaceAll("\"", "&quot;");
-        }
-
-        function loadQuestion() {
-            const q = gameState.questions[gameState.currentIndex];
-            if (!q) {
+        function renderCurrentQuestion() {
+            if (!gameState || !gameState.deck.length) return;
+            const c = gameState.deck[gameState.index];
+            if (!c) {
                 finishGame();
                 return;
             }
 
             gameState.answered = false;
             gameState.hintUsed = false;
-            gameState.timeLeft = 25;
 
-            const total = gameState.questions.length;
-            document.getElementById("hud-q-num").textContent = String(gameState.currentIndex + 1);
-            document.getElementById("hud-score").textContent = String(gameState.score);
-            document.getElementById("hud-streak").textContent = `${gameState.streak}x`;
-            document.getElementById("hud-timer").textContent = `${gameState.timeLeft}s`;
-            document.getElementById("hud-progress-bar").style.width = `${Math.round(((gameState.currentIndex + 1) / total) * 100)}%`;
+            const shuffledOptions = c.options.map((text, origIdx) => ({
+                text,
+                isCorrect: origIdx === c.answer
+            }));
+            shuffledOptions.sort(() => Math.random() - 0.5);
+            gameState.currentShuffledOptions = shuffledOptions;
 
-            document.getElementById("q-topic-pill").textContent = `${q.topic} • ${q.character}`;
-            document.getElementById("q-title").textContent = q.title;
-            document.getElementById("q-story").textContent = q.story;
-            document.getElementById("q-code").textContent = q.code;
-
-            const sceneInfo = buildCaseIllustration(q.scene, q.id);
-            document.getElementById("q-illustration-svg").innerHTML = sceneInfo.svg;
-            document.getElementById("q-illustration-tag").textContent = sceneInfo.tag;
-            document.getElementById("q-illustration-caption").textContent = sceneInfo.caption;
-
-            renderDataSample(q.data);
-
+            const topicPill = document.getElementById("q-topic-pill");
+            const titleEl = document.getElementById("q-title");
+            const storyEl = document.getElementById("q-story");
+            const codeEl = document.getElementById("q-code");
             const hintBox = document.getElementById("q-hint-box");
-            const hintBtn = document.getElementById("btn-hint");
-            hintBox.classList.add("hidden");
-            hintBox.textContent = "";
-            hintBtn.disabled = false;
-            hintBtn.classList.remove("opacity-50", "cursor-not-allowed");
+            const fbBox = document.getElementById("q-feedback");
+            const btnHint = document.getElementById("btn-hint");
+            const illusSvg = document.getElementById("q-illustration-svg");
+            const illusTag = document.getElementById("q-illustration-tag");
+            const illusCap = document.getElementById("q-illustration-caption");
+            const dataWrap = document.getElementById("q-data-wrap");
+            const dataTable = document.getElementById("q-data-table");
+            const optsEl = document.getElementById("q-options");
 
-            const feedbackBox = document.getElementById("q-feedback");
-            feedbackBox.classList.add("hidden");
+            if (topicPill) topicPill.textContent = `${c.topic} • ${c.character}`;
+            if (titleEl) titleEl.textContent = c.title;
+            if (storyEl) storyEl.textContent = c.story;
+            if (codeEl) codeEl.textContent = c.code;
+            if (hintBox) {
+                hintBox.classList.add("hidden");
+                hintBox.textContent = "";
+            }
+            if (fbBox) fbBox.classList.add("hidden");
+            if (btnHint) {
+                btnHint.disabled = false;
+                btnHint.classList.remove("opacity-50", "cursor-not-allowed");
+            }
+            if (illusSvg) illusSvg.innerHTML = buildCaseIllustration(c);
+            if (illusTag) illusTag.textContent = `MISSÃO #${c.id} • ${c.character.toUpperCase()}`;
+            if (illusCap) illusCap.textContent = `Aplique ${c.topic} no trecho indicado em missao.py.`;
 
-            const correctText = q.options[q.correct];
-            const shuffledOptions = shuffleArray(q.options);
-            gameState.currentCorrectIdx = shuffledOptions.indexOf(correctText);
-
-            const optionsEl = document.getElementById("q-options");
-            optionsEl.innerHTML = shuffledOptions.map((opt, idx) => `
-                <button type="button" onclick="selectAnswer(${idx})" class="ans-btn w-full p-4 sm:p-5 rounded-2xl border font-mono text-lg sm:text-xl font-bold flex items-center gap-3.5 text-left ${OPTION_STYLES[idx % OPTION_STYLES.length]}">
-                    <span class="w-9 h-9 rounded-xl bg-black/25 flex items-center justify-center text-sm sm:text-base font-black shrink-0">[${OPTION_LABELS[idx % OPTION_LABELS.length]}]</span>
-                    <span class="break-all">${escapeHtml(opt)}</span>
-                </button>
-            `).join("");
-
-            SoundFX.playCaseMusic(q, gameState.currentIndex);
-
-            if (timerInterval) clearInterval(timerInterval);
-            timerInterval = setInterval(() => {
-                if (gameState.answered) return;
-                gameState.timeLeft -= 1;
-                const timerEl = document.getElementById("hud-timer");
-                if (timerEl) {
-                    timerEl.textContent = `${Math.max(0, gameState.timeLeft)}s`;
-                    timerEl.classList.toggle("text-rose-400", gameState.timeLeft <= 6);
-                    timerEl.classList.toggle("text-emerald-400", gameState.timeLeft > 6);
+            if (dataWrap && dataTable) {
+                if (Array.isArray(c.data) && c.data.length > 0) {
+                    const cols = Object.keys(c.data[0]);
+                    const thead = `<thead><tr class="border-b border-slate-800 text-indigo-300">${cols.map((col) => `<th class="py-1 pr-3">${escapeHtml(col)}</th>`).join("")}</tr></thead>`;
+                    const tbody = `<tbody>${c.data.map((row) => `<tr class="border-b border-slate-900/80 text-slate-300">${cols.map((col) => `<td class="py-1 pr-3">${escapeHtml(row[col])}</td>`).join("")}</tr>`).join("")}</tbody>`;
+                    dataTable.innerHTML = thead + tbody;
+                    dataWrap.classList.remove("hidden");
+                } else {
+                    dataWrap.classList.add("hidden");
+                    dataTable.innerHTML = "";
                 }
-                if (gameState.timeLeft <= 0) {
-                    selectAnswer(-1);
-                }
-            }, 1000);
+            }
+
+            if (optsEl) {
+                optsEl.innerHTML = "";
+                shuffledOptions.forEach((optObj, idx) => {
+                    const btn = document.createElement("button");
+                    btn.type = "button";
+                    btn.dataset.optionIndex = String(idx);
+                    btn.className = `ans-btn w-full p-3.5 sm:p-4 rounded-2xl border text-left font-mono text-sm sm:text-base font-bold flex items-center gap-3 ${OPTION_STYLES[idx % OPTION_STYLES.length]}`;
+                    btn.innerHTML = `<span class="w-7 h-7 rounded-lg bg-black/30 flex items-center justify-center text-xs font-black shrink-0">${OPTION_LABELS[idx] || idx + 1}</span><span class="truncate">${escapeHtml(optObj.text)}</span>`;
+                    btn.onclick = () => selectAnswer(idx, false);
+                    optsEl.appendChild(btn);
+                });
+            }
+
+            if (soundEnabled) {
+                SoundFX.startMusic(c.id || gameState.index);
+            }
+            updateHudStats();
+            startQuestionTimer();
         }
 
         function useHint() {
-            if (gameState.answered || gameState.hintUsed) return;
-            const q = gameState.questions[gameState.currentIndex];
-            if (!q) return;
-
+            if (!gameState || gameState.answered || gameState.hintUsed) return;
+            const c = gameState.deck[gameState.index];
+            if (!c) return;
             gameState.hintUsed = true;
             gameState.score = Math.max(0, gameState.score - 100);
-            document.getElementById("hud-score").textContent = String(gameState.score);
-
-            const hintBox = document.getElementById("q-hint-box");
-            hintBox.textContent = `💡 Dica: ${q.hint}`;
-            hintBox.classList.remove("hidden");
-
-            const hintBtn = document.getElementById("btn-hint");
-            hintBtn.disabled = true;
-            hintBtn.classList.add("opacity-50", "cursor-not-allowed");
             SoundFX.hint();
 
+            const hintBox = document.getElementById("q-hint-box");
+            const btnHint = document.getElementById("btn-hint");
+            if (hintBox) {
+                hintBox.textContent = `💡 Dica: ${c.hint}`;
+                hintBox.classList.remove("hidden");
+            }
+            if (btnHint) {
+                btnHint.disabled = true;
+                btnHint.classList.add("opacity-50", "cursor-not-allowed");
+            }
+            updateHudStats();
             if (currentMode === "room" && currentRoomPin) {
-                upsertPlayerInRoom(currentRoomPin, {
-                    score: gameState.score,
-                    correct: gameState.correctCount,
-                    streak: gameState.streak,
-                    current_question: gameState.currentIndex
-                });
+                upsertPlayerInRoom(currentRoomPin, "playing");
             }
         }
 
-        function selectAnswer(chosenIdx) {
-            if (gameState.answered) return;
+        function selectAnswer(chosenIdx, timedOut = false) {
+            if (!gameState || gameState.answered) return;
+            const shuffled = gameState.currentShuffledOptions || [];
+            if (!timedOut && (chosenIdx < 0 || chosenIdx >= shuffled.length)) return;
+
             gameState.answered = true;
             if (timerInterval) {
                 clearInterval(timerInterval);
                 timerInterval = null;
             }
 
-            const q = gameState.questions[gameState.currentIndex];
-            const buttons = Array.from(document.querySelectorAll("#q-options .ans-btn"));
-            buttons.forEach((btn, idx) => {
-                btn.disabled = true;
-                if (idx === gameState.currentCorrectIdx) {
-                    btn.classList.add("ring-4", "ring-emerald-300");
-                } else if (idx === chosenIdx) {
-                    btn.classList.add("opacity-60");
-                } else {
-                    btn.classList.add("opacity-45");
-                }
-            });
+            const c = gameState.deck[gameState.index];
+            const isCorrect = !timedOut && Boolean(shuffled[chosenIdx]?.isCorrect);
 
-            const feedbackBox = document.getElementById("q-feedback");
-            const badge = document.getElementById("fb-badge");
-            const pointsEl = document.getElementById("fb-points");
-            const expEl = document.getElementById("fb-explanation");
-
-            feedbackBox.classList.remove("hidden", "bg-emerald-950/80", "border-emerald-400/40", "bg-rose-950/80", "border-rose-400/40");
-
-            const isCorrect = chosenIdx === gameState.currentCorrectIdx;
+            let pointsDelta = 0;
             if (isCorrect) {
-                gameState.correctCount += 1;
+                gameState.correct += 1;
                 gameState.streak += 1;
-                gameState.maxStreak = Math.max(gameState.maxStreak, gameState.streak);
-                const gained = 500 + Math.max(0, gameState.timeLeft) * 20 + (gameState.streak - 1) * 100;
-                gameState.score += gained;
-
-                feedbackBox.classList.add("bg-emerald-950/80", "border-emerald-400/40");
-                badge.textContent = "✓ Mandou Bem!";
-                badge.className = "font-black text-sm sm:text-base text-emerald-300";
-                pointsEl.textContent = `+${gained} pts`;
-                pointsEl.className = "font-mono text-xs sm:text-sm font-extrabold text-emerald-300";
+                if (gameState.streak > gameState.bestStreak) {
+                    gameState.bestStreak = gameState.streak;
+                }
+                const speedBonus = gameState.timeLeft * 20;
+                const comboBonus = (gameState.streak - 1) * 100;
+                pointsDelta = 500 + speedBonus + comboBonus;
+                gameState.score += pointsDelta;
                 SoundFX.correct();
             } else {
                 gameState.streak = 0;
-                feedbackBox.classList.add("bg-rose-950/80", "border-rose-400/40");
-                badge.textContent = chosenIdx === -1 ? "✕ Tempo Esgotado!" : "✕ Não Foi Desta Vez";
-                badge.className = "font-black text-sm sm:text-base text-rose-300";
-                pointsEl.textContent = "+0 pts";
-                pointsEl.className = "font-mono text-xs sm:text-sm font-extrabold text-rose-300";
                 SoundFX.wrong();
             }
 
-            expEl.textContent = q.explanation;
-            document.getElementById("hud-score").textContent = String(gameState.score);
-            document.getElementById("hud-streak").textContent = `${gameState.streak}x`;
-
-            if (currentMode === "room" && currentRoomPin) {
-                upsertPlayerInRoom(currentRoomPin, {
-                    score: gameState.score,
-                    correct: gameState.correctCount,
-                    streak: gameState.streak,
-                    current_question: gameState.currentIndex + 1
+            const optsEl = document.getElementById("q-options");
+            if (optsEl) {
+                Array.from(optsEl.querySelectorAll("button")).forEach((btn, idx) => {
+                    btn.disabled = true;
+                    const optIsRight = Boolean(shuffled[idx]?.isCorrect);
+                    if (optIsRight) {
+                        btn.className = "w-full p-3.5 sm:p-4 rounded-2xl border-2 border-emerald-300 bg-emerald-600 text-white text-left font-mono text-sm sm:text-base font-black flex items-center gap-3 shadow-lg";
+                    } else if (idx === chosenIdx) {
+                        btn.className = "w-full p-3.5 sm:p-4 rounded-2xl border-2 border-rose-300 bg-rose-900/90 text-rose-100 text-left font-mono text-sm sm:text-base font-bold flex items-center gap-3 opacity-90";
+                    } else {
+                        btn.classList.add("opacity-45");
+                    }
                 });
+            }
+
+            const fbBox = document.getElementById("q-feedback");
+            const fbBadge = document.getElementById("fb-badge");
+            const fbPoints = document.getElementById("fb-points");
+            const fbExp = document.getElementById("fb-explanation");
+            const btnNext = document.getElementById("btn-next-q");
+
+            if (fbBox && fbBadge && fbPoints && fbExp) {
+                fbBox.classList.remove("hidden");
+                if (isCorrect) {
+                    fbBox.className = "px-3.5 py-2.5 rounded-2xl border border-emerald-400/40 bg-emerald-950/85 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0";
+                    fbBadge.className = "font-black text-sm sm:text-base text-emerald-300";
+                    fbBadge.textContent = "✓ Resposta Correta!";
+                    fbPoints.className = "font-mono text-xs sm:text-sm font-extrabold text-amber-300";
+                    fbPoints.textContent = `+${pointsDelta} pts`;
+                } else {
+                    fbBox.className = "px-3.5 py-2.5 rounded-2xl border border-rose-400/40 bg-rose-950/85 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0";
+                    fbBadge.className = "font-black text-sm sm:text-base text-rose-300";
+                    fbBadge.textContent = timedOut ? "⏰ Tempo Esgotado!" : "✕ Resposta Incorreta";
+                    fbPoints.className = "font-mono text-xs sm:text-sm font-extrabold text-slate-300";
+                    fbPoints.textContent = "+0 pts";
+                }
+                fbExp.textContent = c ? c.explanation : "";
+            }
+
+            if (btnNext) {
+                const isLast = gameState.index >= gameState.deck.length - 1;
+                btnNext.textContent = isLast ? "Ver Resultado Final →" : "Próxima Missão →";
+            }
+
+            updateHudStats();
+            if (currentMode === "room" && currentRoomPin) {
+                upsertPlayerInRoom(currentRoomPin, "playing");
             }
         }
 
         function nextQuestion() {
-            if (!gameState.answered) return;
-            SoundFX.click();
-            gameState.currentIndex += 1;
-            if (gameState.currentIndex >= gameState.questions.length) {
-                finishGame();
+            if (!gameState) return;
+            if (gameState.index < gameState.deck.length - 1) {
+                gameState.index += 1;
+                renderCurrentQuestion();
             } else {
-                loadQuestion();
+                finishGame();
             }
         }
 
-        function saveLeaderboardEntry(name, score) {
-            let list = [];
+        function saveLeaderboardEntry(entry) {
             try {
-                list = JSON.parse(localStorage.getItem(LEADERBOARD_KEY) || "[]");
-                if (!Array.isArray(list)) list = [];
+                const list = JSON.parse(localStorage.getItem(LEADERBOARD_KEY) || "[]");
+                const cleanList = Array.isArray(list) ? list : [];
+                cleanList.push(entry);
+                cleanList.sort((a, b) => Number(b.score || 0) - Number(a.score || 0));
+                localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(cleanList.slice(0, 8)));
+                return cleanList.slice(0, 8);
             } catch (_) {
-                list = [];
+                return [entry];
             }
-            list.push({ name, score, at: Date.now() });
-            list.sort((a, b) => (b.score || 0) - (a.score || 0));
-            list = list.slice(0, 5);
-            try {
-                localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(list));
-            } catch (_) {}
-            return list;
         }
 
-        async function finishGame() {
+        function finishGame() {
             if (timerInterval) {
                 clearInterval(timerInterval);
                 timerInterval = null;
             }
-            SoundFX.stopMusic();
+            if (!gameState) return;
             SoundFX.finish();
 
-            const nameVal = (document.getElementById("player-name")?.value || "Jogador Py").trim() || "Jogador Py";
-            const total = gameState.questions.length || 1;
-            const accuracy = Math.round((gameState.correctCount / total) * 100);
+            const total = gameState.deck.length || 1;
+            const acc = Math.round((gameState.correct / total) * 100);
+            const rankBadge = acc >= 85
+                ? "🏆 Mestre Python & Pandas"
+                : acc >= 60
+                ? "⚡ Desenvolvedor Arcade"
+                : "🌱 Explorador em Treinamento";
 
-            document.getElementById("result-player-title").textContent = nameVal;
-            document.getElementById("result-rank-badge").textContent =
-                accuracy >= 85 ? "★ Mestre Python & Dados" :
-                accuracy >= 60 ? "◆ Desenvolvedor em Ascensão" :
-                "● Cadete em Treinamento";
-            document.getElementById("result-score").textContent = String(gameState.score);
-            document.getElementById("result-correct").textContent = `${gameState.correctCount}/${total}`;
-            document.getElementById("result-streak").textContent = `${gameState.maxStreak}x`;
+            const entry = {
+                name: gameState.playerName,
+                score: gameState.score,
+                correct: `${gameState.correct}/${total}`,
+                streak: `${gameState.bestStreak}x`,
+                date: new Date().toLocaleDateString("pt-BR")
+            };
 
+            const topEntries = saveLeaderboardEntry(entry);
             if (currentMode === "room" && currentRoomPin) {
-                await upsertPlayerInRoom(currentRoomPin, {
-                    status: "finished",
-                    score: gameState.score,
-                    correct: gameState.correctCount,
-                    streak: gameState.maxStreak,
-                    current_question: total
-                });
-                const roomPlayers = Array.isArray(currentRoomData?.players) ? [...currentRoomData.players] : [];
-                roomPlayers.sort((a, b) => (b.score || 0) - (a.score || 0));
-                document.getElementById("leaderboard-title").textContent = `Placar da Sala ${currentRoomPin} (Supabase)`;
-                document.getElementById("leaderboard-rows").innerHTML = roomPlayers.map((entry, idx) => `
-                    <div class="flex items-center justify-between px-3 py-2 rounded-xl bg-slate-950/80 border border-slate-800/80">
-                        <span class="font-bold">#${idx + 1} ${escapeHtml(entry.name || "Jogador")}</span>
-                        <span class="font-mono font-extrabold text-emerald-300">${entry.score || 0} pts</span>
-                    </div>
-                `).join("");
-            } else {
-                const entries = saveLeaderboardEntry(nameVal, gameState.score);
-                document.getElementById("leaderboard-title").textContent = "Placar Local";
-                document.getElementById("leaderboard-rows").innerHTML = entries.map((entry, idx) => `
-                    <div class="flex items-center justify-between px-3 py-2 rounded-xl bg-slate-950/80 border border-slate-800/80">
-                        <span class="font-bold">#${idx + 1} ${escapeHtml(entry.name)}</span>
-                        <span class="font-mono font-extrabold text-indigo-300">${entry.score || 0} pts</span>
-                    </div>
-                `).join("");
+                upsertPlayerInRoom(currentRoomPin, "finished");
             }
 
-            renderAllAvatars();
             showScreen("screen-result");
+            const titleEl = document.getElementById("result-player-title");
+            const rankEl = document.getElementById("result-rank-badge");
+            const scoreEl = document.getElementById("result-score");
+            const correctEl = document.getElementById("result-correct");
+            const streakEl = document.getElementById("result-streak");
+            const lbTitle = document.getElementById("leaderboard-title");
+            const lbRows = document.getElementById("leaderboard-rows");
+
+            if (titleEl) titleEl.textContent = gameState.playerName;
+            if (rankEl) rankEl.textContent = rankBadge;
+            if (scoreEl) scoreEl.textContent = String(gameState.score);
+            if (correctEl) correctEl.textContent = `${gameState.correct}/${total}`;
+            if (streakEl) streakEl.textContent = `${gameState.bestStreak}x`;
+
+            if (currentMode === "room" && currentRoomData && Array.isArray(currentRoomData.players) && currentRoomData.players.length > 0) {
+                if (lbTitle) lbTitle.textContent = `Placar da Sala ${currentRoomPin || ""}`;
+                const sortedRoom = [...currentRoomData.players].sort((a, b) => Number(b.score || 0) - Number(a.score || 0));
+                if (lbRows) {
+                    lbRows.innerHTML = sortedRoom.map((p, i) => `<div class="flex items-center justify-between px-3 py-2 rounded-xl bg-slate-950/80 border border-slate-800"><span class="font-bold text-slate-200">#${i + 1} ${escapeHtml(p.name || "Jogador")}</span><span class="font-mono font-extrabold text-indigo-300">${Number(p.score || 0)} pts</span></div>`).join("");
+                }
+            } else {
+                if (lbTitle) lbTitle.textContent = "Top 8 Placar Local";
+                if (lbRows) {
+                    lbRows.innerHTML = topEntries.map((item, i) => `<div class="flex items-center justify-between px-3 py-2 rounded-xl bg-slate-950/80 border border-slate-800"><span class="font-bold text-slate-200">#${i + 1} ${escapeHtml(item.name || "Jogador")} <span class="text-xs text-slate-400 font-normal">(${escapeHtml(item.correct || "")})</span></span><span class="font-mono font-extrabold text-indigo-300">${Number(item.score || 0)} pts</span></div>`).join("");
+                }
+            }
         }
 
-        /* =====================================================================
-           6. INICIALIZAÇÃO E ATALHOS DE TECLADO
-           ===================================================================== */
-        window.addEventListener("DOMContentLoaded", () => {
-            loadUserAvatar();
-            initSupabaseClient();
-            document.addEventListener("pointerdown", () => SoundFX.ensureCtx(), { once: false });
-            document.addEventListener("keydown", (e) => {
-                const gameVisible = !document.getElementById("screen-game")?.classList.contains("hidden");
-                if (!gameVisible) return;
+        function replayCurrentMode() {
+            if (currentMode === "room" && currentRoomPin) {
+                beginRoomGameplay(currentRoomData || { pin: currentRoomPin, status: "playing" });
+            } else {
+                startSoloGame();
+            }
+        }
 
-                if (!gameState.answered) {
-                    if (["1", "2", "3", "4"].includes(e.key)) {
-                        selectAnswer(Number(e.key) - 1);
-                    } else if (e.key.toLowerCase() === "h") {
-                        useHint();
-                    }
-                } else if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    nextQuestion();
+        document.addEventListener("keydown", (event) => {
+            const gameSec = document.getElementById("screen-game");
+            if (!gameSec || gameSec.classList.contains("hidden") || !gameState) return;
+            const key = String(event.key || "").toLowerCase();
+            if (!gameState.answered) {
+                if (["1", "2", "3", "4"].includes(key)) {
+                    selectAnswer(Number(key) - 1, false);
+                } else if (key === "h") {
+                    useHint();
+                }
+            } else if (key === "enter") {
+                nextQuestion();
+            }
+        });
+
+        window.addEventListener("DOMContentLoaded", () => {
+            window.addEventListener("unhandledrejection", (event) => {
+                const msg = String(event?.reason?.message || event?.reason || "");
+                if (msg.includes("WebSocket") || msg.includes("not allowed in Canvas")) {
+                    realtimeBlockedInSandbox = true;
+                    event.preventDefault();
+                    initSupabaseClient();
                 }
             });
+
+            window.addEventListener("error", (event) => {
+                const msg = String(event?.message || event?.error?.message || "");
+                if (msg.includes("WebSocket") || msg.includes("not allowed in Canvas")) {
+                    realtimeBlockedInSandbox = true;
+                    event.preventDefault();
+                    initSupabaseClient();
+                }
+            }, true);
+
+            loadUserAvatar();
+            initSupabaseClient();
+            runPinRoomSelfCheck();
+
+            document.addEventListener("pointerdown", () => {
+                if (soundEnabled && !SoundFX.bgmActive) {
+                    SoundFX.startMusic(gameState ? gameState.index : 0);
+                }
+            }, { once: true });
         });
     </script>
 </body>
