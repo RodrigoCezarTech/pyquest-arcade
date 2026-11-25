@@ -965,11 +965,29 @@
             const activePin = normalizePin(currentRoomPin || (currentRoomData && currentRoomData.pin) || "");
             if (activePin && cleanPin !== activePin) return;
 
+            const existingPlayers = Array.isArray(currentRoomData?.players) ? currentRoomData.players : [];
+            const incomingPlayers = Array.isArray(room.players) ? room.players : [];
+            const mergedMap = new Map();
+
+            [...existingPlayers, ...incomingPlayers].forEach((p) => {
+                if (!p) return;
+                const key = String(p.id || p.name || "").trim();
+                if (!key) return;
+                const prev = mergedMap.get(key);
+                if (!prev) {
+                    mergedMap.set(key, p);
+                } else {
+                    const prevTime = Date.parse(prev.updated_at || 0) || 0;
+                    const nextTime = Date.parse(p.updated_at || 0) || 0;
+                    mergedMap.set(key, nextTime >= prevTime ? { ...prev, ...p } : { ...p, ...prev });
+                }
+            });
+
             const normalizedRoom = {
                 pin: cleanPin,
-                status: room.status || "waiting",
-                host_name: room.host_name || "Host",
-                players: Array.isArray(room.players) ? room.players : [],
+                status: room.status === "playing" || currentRoomData?.status === "playing" ? "playing" : (room.status || "waiting"),
+                host_name: room.host_name || currentRoomData?.host_name || "Host",
+                players: Array.from(mergedMap.values()),
                 current_question: Number(room.current_question || 0),
                 updated_at: room.updated_at || new Date().toISOString()
             };
@@ -1110,69 +1128,15 @@
                     .select("*")
                     .eq("pin", cleanPin)
                     .maybeSingle();
-                if (!error && data && normalizePin(data.pin) === cleanPin) {
+                if (error) {
+                    showToast(`Supabase (${cleanPin}): ${error.message || error.code || "erro ao consultar sala"}`);
+                    return;
+                }
+                if (data && normalizePin(data.pin) === cleanPin) {
                     handleIncomingRoomUpdate(data);
                 }
-            } catch (_) {}
-        }
-
-        function startRoomPolling(pin) {
-            const cleanPin = normalizePin(pin);
-            stopRoomPolling();
-            if (!cleanPin) return;
-            pollRoomByPin(cleanPin);
-            roomPollingTimer = setInterval(() => {
-                pollRoomByPin(cleanPin);
-                const cached = readCachedRoom(cleanPin);
-                if (cached) {
-                    handleIncomingRoomUpdate(cached);
-                }
-            }, 2000);
-        }
-
-        async function subscribeToRoomPin(pin) {
-            const cleanPin = normalizePin(pin);
-            if (!cleanPin) return;
-
-            startRoomPolling(cleanPin);
-
-            const client = initSupabaseClient();
-            if (!client || realtimeBlockedInSandbox) return;
-
-            try {
-                if (roomChannel && typeof client.removeChannel === "function") {
-                    await client.removeChannel(roomChannel);
-                    roomChannel = null;
-                }
-
-                if (typeof client.channel === "function") {
-                    roomChannel = client
-                        .channel(`pyquest_room_${cleanPin}`)
-                        .on(
-                            "postgres_changes",
-                            {
-                                event: "*",
-                                schema: "public",
-                                table: SUPABASE_TABLE,
-                                filter: `pin=eq.${cleanPin}`
-                            },
-                            (payload) => {
-                                const updated = payload?.new;
-                                if (updated && normalizePin(updated.pin) === cleanPin) {
-                                    handleIncomingRoomUpdate(updated);
-                                }
-                            }
-                        )
-                        .subscribe((status) => {
-                            if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-                                realtimeBlockedInSandbox = true;
-                                initSupabaseClient();
-                            }
-                        });
-                }
-            } catch (_) {
-                realtimeBlockedInSandbox = true;
-                initSupabaseClient();
+            } catch (err) {
+                showToast(`Supabase (${cleanPin}): ${err?.message || "falha de conexão"}`);
             }
         }
 
@@ -1212,17 +1176,55 @@
             const client = initSupabaseClient();
             if (client) {
                 try {
+                    const { data: latestRow } = await client
+                        .from(SUPABASE_TABLE)
+                        .select("*")
+                        .eq("pin", cleanPin)
+                        .maybeSingle();
+
+                    const remotePlayers = Array.isArray(latestRow?.players) ? latestRow.players : [];
+                    const combinedMap = new Map();
+                    [...remotePlayers, ...playersList].forEach((p) => {
+                        if (!p) return;
+                        const k = String(p.id || p.name || "").trim();
+                        if (!k) return;
+                        const prev = combinedMap.get(k);
+                        if (!prev) {
+                            combinedMap.set(k, p);
+                        } else {
+                            const tPrev = Date.parse(prev.updated_at || 0) || 0;
+                            const tNext = Date.parse(p.updated_at || 0) || 0;
+                            combinedMap.set(k, tNext >= tPrev ? { ...prev, ...p } : { ...p, ...prev });
+                        }
+                    });
+
+                    const payloadToSave = {
+                        pin: cleanPin,
+                        status: forcedStatus || latestRow?.status || nextRoom.status,
+                        host_name: latestRow?.host_name || nextRoom.host_name,
+                        players: Array.from(combinedMap.values()),
+                        current_question: Number(latestRow?.current_question ?? nextRoom.current_question ?? 0),
+                        updated_at: new Date().toISOString()
+                    };
+
                     const { data, error } = await client
                         .from(SUPABASE_TABLE)
-                        .upsert(nextRoom, { onConflict: "pin" })
+                        .upsert(payloadToSave, { onConflict: "pin" })
                         .select()
                         .maybeSingle();
-                    if (!error && data) {
+
+                    if (error) {
+                        showToast(`Erro ao salvar sala ${cleanPin} no Supabase: ${error.message || error.code}`);
+                        return nextRoom;
+                    }
+                    if (data) {
                         handleIncomingRoomUpdate(data);
                         broadcastRoomLocally(data);
                         return data;
                     }
-                } catch (_) {}
+                } catch (err) {
+                    showToast(`Falha de rede ao sincronizar sala ${cleanPin}: ${err?.message || "erro"}`);
+                }
             }
             return nextRoom;
         }
@@ -1417,15 +1419,10 @@
 
         function showToast(msg) {
             const rawMsg = String(msg || "");
-            if (/failed to fetch|networkerror|load failed/i.test(rawMsg) && /supabase/i.test(rawMsg)) {
-                realtimeBlockedInSandbox = true;
-                initSupabaseClient();
-                return;
-            }
             const box = document.getElementById("toast-box");
             const txt = document.getElementById("toast-text");
             if (!box || !txt) return;
-            txt.textContent = msg;
+            txt.textContent = rawMsg;
             box.classList.remove("hidden");
         }
 
