@@ -984,6 +984,7 @@
             });
 
             const normalizedRoom = {
+                ...room,
                 pin: cleanPin,
                 status: room.status === "playing" || currentRoomData?.status === "playing" ? "playing" : (room.status || "waiting"),
                 host_name: room.host_name || currentRoomData?.host_name || "Host",
@@ -1002,6 +1003,9 @@
             const gameVisible = !document.getElementById("screen-game")?.classList.contains("hidden");
             if (joinVisible && normalizedRoom.status === "playing" && !gameVisible) {
                 beginRoomGameplay(normalizedRoom);
+            } else if (gameVisible && normalizedRoom.status === "playing" && Array.isArray(normalizedRoom.questions) && normalizedRoom.questions.length && gameState && Number(normalizedRoom.current_question) !== Number(gameState.index)) {
+                gameState.index = Number(normalizedRoom.current_question) || 0;
+                renderCurrentQuestion();
             }
         }
 
@@ -1259,6 +1263,14 @@
             if (pinDisplay) pinDisplay.textContent = pin;
 
             await upsertPlayerInRoom(pin, "waiting");
+            const client = initSupabaseClient();
+            if (client) {
+                const { error } = await client.from(SUPABASE_TABLE).update({
+                    host_player_id: getLocalPlayerId(), questions: [], current_question: 0,
+                    answers: {}, updated_at: new Date().toISOString()
+                }).eq("pin", pin);
+                if (error) showToast("Sala criada, mas houve erro ao registrar anfitrião: " + error.message);
+            }
             await subscribeToRoomPin(pin);
         }
 
@@ -1327,11 +1339,11 @@
             const playerName = (document.getElementById("player-name")?.value || "").trim() || userAvatar?.name || "Jogador Py";
             if (userAvatar) userAvatar.name = playerName;
 
-            const deck = buildDeckFromSettings();
+            const deck = Array.isArray(room?.questions) && room.questions.length ? room.questions : buildDeckFromSettings();
             gameState = {
                 playerName,
                 deck,
-                index: 0,
+                index: Math.max(0, Math.min(deck.length - 1, Number(room?.current_question || 0))),
                 score: 0,
                 correct: 0,
                 streak: 0,
@@ -1350,16 +1362,30 @@
             const createVisible = !document.getElementById("create-room-panel")?.classList.contains("hidden");
             const inputPin = normalizePin(document.getElementById("room-pin-input")?.value || "");
             const activePin = createVisible ? normalizePin(currentRoomPin) : (inputPin || normalizePin(currentRoomPin));
-
-            if (!activePin || activePin.length < 4) {
-                showToast("Digite ou gere um PIN válido antes de iniciar a partida.");
-                return;
-            }
-
+            if (!activePin || activePin.length < 4) { showToast("Digite ou gere um PIN válido antes de iniciar a partida."); return; }
             currentRoomPin = activePin;
             await subscribeToRoomPin(activePin);
-            const updatedRoom = await upsertPlayerInRoom(activePin, "playing");
-            beginRoomGameplay(updatedRoom || { pin: activePin, status: "playing", players: [] });
+            const client = initSupabaseClient();
+            if (!client) { showToast("Não foi possível conectar ao Supabase."); return; }
+            const { data: room, error } = await client.from(SUPABASE_TABLE).select("*").eq("pin", activePin).maybeSingle();
+            if (error || !room) { showToast("Não encontrei essa sala. Confira o PIN."); return; }
+            if (room.host_player_id !== getLocalPlayerId()) {
+                if (room.status === "playing" && Array.isArray(room.questions) && room.questions.length) beginRoomGameplay(room);
+                else showToast("Aguardando o anfitrião iniciar a partida.");
+                return;
+            }
+            const deck = buildDeckFromSettings();
+            const startedAt = new Date();
+            const endsAt = new Date(startedAt.getTime() + 25000);
+            const { data: startedRoom, error: startError } = await client.from(SUPABASE_TABLE).update({
+                status: "playing", questions: deck, current_question: 0,
+                round_started_at: startedAt.toISOString(), round_duration_seconds: 25,
+                round_ends_at: endsAt.toISOString(), answers: {},
+                game_started_at: startedAt.toISOString(), updated_at: startedAt.toISOString()
+            }).eq("pin", activePin).eq("host_player_id", getLocalPlayerId()).select().maybeSingle();
+            if (startError || !startedRoom) { showToast("Não consegui iniciar a sala. Verifique a conexão e as permissões."); return; }
+            handleIncomingRoomUpdate(startedRoom);
+            beginRoomGameplay(startedRoom);
         }
 
         function startSoloGame() {
@@ -1591,7 +1617,9 @@
                 timerInterval = null;
             }
             if (!gameState) return;
-            gameState.timeLeft = 25;
+            const deadline = currentMode === "room" ? Date.parse(currentRoomData?.round_ends_at || "") : NaN;
+            gameState.roundDeadline = Number.isFinite(deadline) ? deadline : Date.now() + 25000;
+            gameState.timeLeft = Math.max(0, Math.ceil((gameState.roundDeadline - Date.now()) / 1000));
             updateHudStats();
             timerInterval = setInterval(() => {
                 if (!gameState || gameState.answered) {
@@ -1599,7 +1627,7 @@
                     timerInterval = null;
                     return;
                 }
-                gameState.timeLeft = Math.max(0, gameState.timeLeft - 1);
+                gameState.timeLeft = Math.max(0, Math.ceil((gameState.roundDeadline - Date.now()) / 1000));
                 updateHudStats();
                 if (gameState.timeLeft === 0) {
                     clearInterval(timerInterval);
@@ -1796,14 +1824,29 @@
             }
         }
 
-        function nextQuestion() {
+        async function nextQuestion() {
             if (!gameState) return;
-            if (gameState.index < gameState.deck.length - 1) {
-                gameState.index += 1;
-                renderCurrentQuestion();
-            } else {
-                finishGame();
+            if (currentMode === "room") {
+                if (currentRoomData?.host_player_id !== getLocalPlayerId()) { showToast("Somente o anfitrião pode avançar a rodada."); return; }
+                const client = initSupabaseClient();
+                const nextIndex = gameState.index + 1;
+                if (nextIndex >= gameState.deck.length) {
+                    const { error } = await client.from(SUPABASE_TABLE).update({ status: "finished", updated_at: new Date().toISOString() }).eq("pin", currentRoomPin).eq("host_player_id", getLocalPlayerId());
+                    if (error) { showToast("Não consegui encerrar a partida."); return; }
+                    finishGame(); return;
+                }
+                const startedAt = new Date();
+                const endsAt = new Date(startedAt.getTime() + 25000);
+                const { data, error } = await client.from(SUPABASE_TABLE).update({
+                    current_question: nextIndex, round_started_at: startedAt.toISOString(),
+                    round_duration_seconds: 25, round_ends_at: endsAt.toISOString(),
+                    answers: {}, updated_at: startedAt.toISOString()
+                }).eq("pin", currentRoomPin).eq("host_player_id", getLocalPlayerId()).select().maybeSingle();
+                if (error || !data) { showToast("Falha ao avançar a rodada."); return; }
+                handleIncomingRoomUpdate(data); gameState.index = nextIndex; renderCurrentQuestion(); return;
             }
+            if (gameState.index < gameState.deck.length - 1) { gameState.index += 1; renderCurrentQuestion(); }
+            else finishGame();
         }
 
         function saveLeaderboardEntry(entry) {
