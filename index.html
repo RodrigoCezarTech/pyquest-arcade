@@ -1369,7 +1369,8 @@
                 bestStreak: 0,
                 timeLeft: 25,
                 hintUsed: false,
-                answered: false
+                answered: false,
+                submitting: false
             };
 
             showScreen("screen-game");
@@ -1394,15 +1395,18 @@
                 return;
             }
             const deck = buildDeckFromSettings();
-            const startedAt = new Date();
-            const endsAt = new Date(startedAt.getTime() + 25000);
-            const { data: startedRoom, error: startError } = await client.from(SUPABASE_TABLE).update({
-                status: "playing", questions: deck, current_question: 0,
-                round_started_at: startedAt.toISOString(), round_duration_seconds: 25,
-                round_ends_at: endsAt.toISOString(), answers: {},
-                game_started_at: startedAt.toISOString(), updated_at: startedAt.toISOString()
-            }).eq("pin", activePin).eq("host_player_id", getLocalPlayerId()).select().maybeSingle();
-            if (startError || !startedRoom) { showToast("Não consegui iniciar a sala. Verifique a conexão e as permissões."); return; }
+            const { data: startResult, error: startError } = await client.rpc("pyquest_start_game", {
+                p_room_pin: activePin,
+                p_host_player_id: getLocalPlayerId(),
+                p_questions: deck,
+                p_duration_seconds: 25
+            });
+            if (startError || !startResult?.started) {
+                showToast("Não consegui iniciar a sala: " + (startError?.message || "confira as permissões."));
+                return;
+            }
+            const { data: startedRoom, error: reloadError } = await client.from(SUPABASE_TABLE).select("*").eq("pin", activePin).maybeSingle();
+            if (reloadError || !startedRoom) { showToast("Partida iniciada, mas não consegui carregar a sala."); return; }
             handleIncomingRoomUpdate(startedRoom);
             beginRoomGameplay(startedRoom);
         }
@@ -1665,6 +1669,7 @@
             }
 
             gameState.answered = false;
+            gameState.submitting = false;
             gameState.hintUsed = false;
             if (roomStatusInterval) { clearInterval(roomStatusInterval); roomStatusInterval = null; }
             const nextButton = document.getElementById("btn-next-q");
@@ -1740,6 +1745,46 @@
             }
             updateHudStats();
             startQuestionTimer();
+            if (currentMode === "room" && currentRoomData?.host_player_id === getLocalPlayerId()) {
+                startRoomAutoAdvance();
+            }
+        }
+
+        function startRoomAutoAdvance() {
+            if (roomStatusInterval) clearInterval(roomStatusInterval);
+            const expectedQuestion = gameState?.index;
+            roomStatusInterval = setInterval(async () => {
+                if (!gameState || currentMode !== "room" ||
+                    currentRoomData?.host_player_id !== getLocalPlayerId() ||
+                    gameState.index !== expectedQuestion || gameState.finished) {
+                    clearInterval(roomStatusInterval);
+                    roomStatusInterval = null;
+                    return;
+                }
+                try {
+                    const client = initSupabaseClient();
+                    if (!client) return;
+                    const { data, error } = await client.rpc("pyquest_advance_if_ready", {
+                        p_room_pin: currentRoomPin,
+                        p_host_player_id: getLocalPlayerId(),
+                        p_expected_question: expectedQuestion
+                    });
+                    if (error) throw error;
+                    if (!data?.advanced) return;
+                    if (data.finished || data.status === "finished") {
+                        clearInterval(roomStatusInterval);
+                        roomStatusInterval = null;
+                        finishGame();
+                        return;
+                    }
+                    const { data: updatedRoom, error: reloadError } = await client
+                        .from(SUPABASE_TABLE).select("*").eq("pin", currentRoomPin).maybeSingle();
+                    if (reloadError || !updatedRoom) throw reloadError || new Error("Não consegui atualizar a sala.");
+                    handleIncomingRoomUpdate(updatedRoom);
+                } catch (err) {
+                    console.error("Avanço automático:", err);
+                }
+            }, 1200);
         }
 
         function useHint() {
@@ -1861,62 +1906,18 @@
             }
             updateHudStats();
 
-            if (currentMode === "room" && currentRoomPin && isHost) {
-                if (roomStatusInterval) clearInterval(roomStatusInterval);
-                roomStatusInterval = setInterval(async () => {
-                    if (!gameState || currentMode !== "room" || !gameState.answered) {
-                        clearInterval(roomStatusInterval); roomStatusInterval = null; return;
-                    }
-                    try {
-                        const client = initSupabaseClient();
-                        const { data, error } = await client.rpc("pyquest_get_round_status", {
-                            p_room_pin: currentRoomPin, p_question_index: gameState.index
-                        });
-                        if (error) throw error;
-                        const button = document.getElementById("btn-next-q");
-                        if (!button || !data) return;
-                        const expired = data.round_ends_at && Date.now() >= Date.parse(data.round_ends_at);
-                        const ready = Boolean(data.all_answered) || Boolean(expired);
-                        button.disabled = !ready;
-                        button.textContent = ready ? (gameState.index >= gameState.deck.length - 1 ? "Ver Resultado Final →" : "Próxima Missão →") : `Aguardando respostas (${data.answered_count}/${data.player_count})...`;
-                        button.classList.toggle("opacity-50", !ready);
-                    } catch (err) {
-                        showToast("Erro ao consultar rodada: " + (err?.message || "erro"));
-                    }
-                }, 1200);
+            if (currentMode === "room" && btnNext) {
+                btnNext.textContent = "Aguardando os demais participantes...";
+                btnNext.classList.add("hidden");
+                btnNext.disabled = true;
             }
         }
 
         async function nextQuestion() {
             if (!gameState) return;
             if (currentMode === "room") {
-                if (currentRoomData?.host_player_id !== getLocalPlayerId()) { showToast("Somente o anfitrião pode avançar a rodada."); return; }
-                const client = initSupabaseClient();
-                const { data: roundStatus, error: statusError } = await client.rpc("pyquest_get_round_status", {
-                    p_room_pin: currentRoomPin, p_question_index: gameState.index
-                });
-                if (statusError || !roundStatus) { showToast("Não consegui verificar as respostas da rodada."); return; }
-                const timeExpired = roundStatus.round_ends_at && Date.now() >= Date.parse(roundStatus.round_ends_at);
-                if (!roundStatus.all_answered && !timeExpired) {
-                    showToast(`Ainda aguardando respostas: ${roundStatus.answered_count}/${roundStatus.player_count}.`);
-                    return;
-                }
-                if (roomStatusInterval) { clearInterval(roomStatusInterval); roomStatusInterval = null; }
-                const nextIndex = gameState.index + 1;
-                if (nextIndex >= gameState.deck.length) {
-                    const { error } = await client.from(SUPABASE_TABLE).update({ status: "finished", updated_at: new Date().toISOString() }).eq("pin", currentRoomPin).eq("host_player_id", getLocalPlayerId());
-                    if (error) { showToast("Não consegui encerrar a partida."); return; }
-                    finishGame(); return;
-                }
-                const startedAt = new Date();
-                const endsAt = new Date(startedAt.getTime() + 25000);
-                const { data, error } = await client.from(SUPABASE_TABLE).update({
-                    current_question: nextIndex, round_started_at: startedAt.toISOString(),
-                    round_duration_seconds: 25, round_ends_at: endsAt.toISOString(),
-                    answers: {}, updated_at: startedAt.toISOString()
-                }).eq("pin", currentRoomPin).eq("host_player_id", getLocalPlayerId()).select().maybeSingle();
-                if (error || !data) { showToast("Falha ao avançar a rodada."); return; }
-                handleIncomingRoomUpdate(data); gameState.index = nextIndex; renderCurrentQuestion(); return;
+                showToast("No multiplayer, a próxima missão começa automaticamente.");
+                return;
             }
             if (gameState.index < gameState.deck.length - 1) { gameState.index += 1; renderCurrentQuestion(); }
             else finishGame();
