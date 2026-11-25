@@ -412,6 +412,7 @@
         let currentMode = "solo";
         let currentRoomPin = null;
         let timerInterval = null;
+        let roomStatusInterval = null;
         let soundEnabled = true;
         let gameState = null;
         let userAvatar = {
@@ -1665,9 +1666,13 @@
 
             gameState.answered = false;
             gameState.hintUsed = false;
+            if (roomStatusInterval) { clearInterval(roomStatusInterval); roomStatusInterval = null; }
+            const nextButton = document.getElementById("btn-next-q");
+            if (nextButton) { nextButton.classList.add("hidden"); nextButton.disabled = true; }
 
             const shuffledOptions = c.options.map((text, origIdx) => ({
                 text,
+                originalIndex: origIdx,
                 isCorrect: origIdx === c.answer
             }));
             shuffledOptions.sort(() => Math.random() - 0.5);
@@ -1761,51 +1766,76 @@
             }
         }
 
-        function selectAnswer(chosenIdx, timedOut = false) {
+        async function selectAnswer(chosenIdx, timedOut = false) {
             if (!gameState || gameState.answered) return;
             const shuffled = gameState.currentShuffledOptions || [];
             if (!timedOut && (chosenIdx < 0 || chosenIdx >= shuffled.length)) return;
 
+            // Trava somente a tela deste participante. A rodada compartilhada
+            // continua ativa para quem ainda não respondeu.
             gameState.answered = true;
-            if (timerInterval) {
-                clearInterval(timerInterval);
-                timerInterval = null;
-            }
+            if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
 
             const c = gameState.deck[gameState.index];
-            const isCorrect = !timedOut && Boolean(shuffled[chosenIdx]?.isCorrect);
-
+            let isCorrect = !timedOut && Boolean(shuffled[chosenIdx]?.isCorrect);
             let pointsDelta = 0;
-            if (isCorrect) {
-                gameState.correct += 1;
-                gameState.streak += 1;
-                if (gameState.streak > gameState.bestStreak) {
-                    gameState.bestStreak = gameState.streak;
+
+            if (currentMode === "room" && currentRoomPin && !timedOut) {
+                const client = initSupabaseClient();
+                const { data, error } = await client.rpc("pyquest_submit_answer", {
+                    p_room_pin: currentRoomPin,
+                    p_question_index: gameState.index,
+                    p_player_id: getLocalPlayerId(),
+                    p_player_name: gameState.playerName,
+                    p_selected_option: Number(shuffled[chosenIdx].originalIndex)
+                });
+                if (error || !data) {
+                    gameState.answered = false;
+                    showToast("Não consegui registrar sua resposta. Tente novamente.");
+                    startQuestionTimer();
+                    return;
                 }
-                const speedBonus = gameState.timeLeft * 20;
-                const comboBonus = (gameState.streak - 1) * 100;
-                pointsDelta = 500 + speedBonus + comboBonus;
-                gameState.score += pointsDelta;
-                SoundFX.correct();
+                isCorrect = Boolean(data.is_correct);
+                pointsDelta = Number(data.points_awarded || 0);
+                if (isCorrect) {
+                    gameState.correct += 1;
+                    gameState.streak += 1;
+                    gameState.bestStreak = Math.max(gameState.bestStreak, gameState.streak);
+                    gameState.score += pointsDelta;
+                    SoundFX.correct();
+                } else {
+                    gameState.streak = 0;
+                    SoundFX.wrong();
+                }
+                gameState.roomAnsweredCount = Number(data.answered_count || 0);
+                gameState.roomPlayerCount = Number(data.player_count || 0);
+            } else if (currentMode === "solo") {
+                if (isCorrect) {
+                    gameState.correct += 1;
+                    gameState.streak += 1;
+                    gameState.bestStreak = Math.max(gameState.bestStreak, gameState.streak);
+                    pointsDelta = 500 + (gameState.timeLeft * 20) + ((gameState.streak - 1) * 100);
+                    gameState.score += pointsDelta;
+                    SoundFX.correct();
+                } else {
+                    gameState.streak = 0;
+                    SoundFX.wrong();
+                }
             } else {
+                // Timeout no multiplayer não é enviado como resposta válida.
                 gameState.streak = 0;
                 SoundFX.wrong();
             }
 
             const optsEl = document.getElementById("q-options");
-            if (optsEl) {
-                Array.from(optsEl.querySelectorAll("button")).forEach((btn, idx) => {
-                    btn.disabled = true;
-                    const optIsRight = Boolean(shuffled[idx]?.isCorrect);
-                    if (optIsRight) {
-                        btn.className = "w-full p-3.5 sm:p-4 rounded-2xl border-2 border-emerald-300 bg-emerald-600 text-white text-left font-mono text-sm sm:text-base font-black flex items-center gap-3 shadow-lg";
-                    } else if (idx === chosenIdx) {
-                        btn.className = "w-full p-3.5 sm:p-4 rounded-2xl border-2 border-rose-300 bg-rose-900/90 text-rose-100 text-left font-mono text-sm sm:text-base font-bold flex items-center gap-3 opacity-90";
-                    } else {
-                        btn.classList.add("opacity-45");
-                    }
-                });
-            }
+            if (optsEl) Array.from(optsEl.querySelectorAll("button")).forEach((btn, idx) => {
+                btn.disabled = true;
+                if (shuffled[idx]?.isCorrect) {
+                    btn.className = "w-full p-3.5 sm:p-4 rounded-2xl border-2 border-emerald-300 bg-emerald-600 text-white text-left font-mono text-sm sm:text-base font-black flex items-center gap-3 shadow-lg";
+                } else if (idx === chosenIdx) {
+                    btn.className = "w-full p-3.5 sm:p-4 rounded-2xl border-2 border-rose-300 bg-rose-900/90 text-rose-100 text-left font-mono text-sm sm:text-base font-bold flex items-center gap-3 opacity-90";
+                } else btn.classList.add("opacity-45");
+            });
 
             const fbBox = document.getElementById("q-feedback");
             const fbBadge = document.getElementById("fb-badge");
@@ -1815,30 +1845,45 @@
 
             if (fbBox && fbBadge && fbPoints && fbExp) {
                 fbBox.classList.remove("hidden");
-                if (isCorrect) {
-                    fbBox.className = "px-3.5 py-2.5 rounded-2xl border border-emerald-400/40 bg-emerald-950/85 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0";
-                    fbBadge.className = "font-black text-sm sm:text-base text-emerald-300";
-                    fbBadge.textContent = "✓ Resposta Correta!";
-                    fbPoints.className = "font-mono text-xs sm:text-sm font-extrabold text-amber-300";
-                    fbPoints.textContent = `+${pointsDelta} pts`;
-                } else {
-                    fbBox.className = "px-3.5 py-2.5 rounded-2xl border border-rose-400/40 bg-rose-950/85 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0";
-                    fbBadge.className = "font-black text-sm sm:text-base text-rose-300";
-                    fbBadge.textContent = timedOut ? "⏰ Tempo Esgotado!" : "✕ Resposta Incorreta";
-                    fbPoints.className = "font-mono text-xs sm:text-sm font-extrabold text-slate-300";
-                    fbPoints.textContent = "+0 pts";
-                }
-                fbExp.textContent = c ? c.explanation : "";
+                fbBox.className = isCorrect
+                    ? "px-3.5 py-2.5 rounded-2xl border border-emerald-400/40 bg-emerald-950/85 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0"
+                    : "px-3.5 py-2.5 rounded-2xl border border-rose-400/40 bg-rose-950/85 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0";
+                fbBadge.className = "font-black text-sm sm:text-base " + (isCorrect ? "text-emerald-300" : "text-rose-300");
+                fbBadge.textContent = isCorrect ? "✓ Resposta Correta!" : (timedOut ? "⏰ Tempo Esgotado!" : "✕ Resposta Incorreta");
+                fbPoints.className = "font-mono text-xs sm:text-sm font-extrabold text-amber-300";
+                fbPoints.textContent = isCorrect ? `+${pointsDelta} pts` : "+0 pts";
+                fbExp.textContent = c?.explanation || "";
             }
 
             if (btnNext) {
-                const isLast = gameState.index >= gameState.deck.length - 1;
-                btnNext.textContent = isLast ? "Ver Resultado Final →" : "Próxima Missão →";
+                const isHost = currentMode !== "room" || currentRoomData?.host_player_id === getLocalPlayerId();
+                btnNext.textContent = currentMode === "room" ? "Aguardando participantes..." : (gameState.index >= gameState.deck.length - 1 ? "Ver Resultado Final →" : "Próxima Missão →");
+                btnNext.classList.toggle("hidden", currentMode === "room" && !isHost);
+                btnNext.disabled = currentMode === "room";
+                btnNext.classList.toggle("opacity-50", currentMode === "room");
             }
 
             updateHudStats();
-            if (currentMode === "room" && currentRoomPin) {
-                upsertPlayerInRoom(currentRoomPin, "playing");
+
+            if (currentMode === "room" && currentRoomPin && currentRoomData?.host_player_id === getLocalPlayerId()) {
+                if (roomStatusInterval) clearInterval(roomStatusInterval);
+                roomStatusInterval = setInterval(async () => {
+                    if (!gameState || currentMode !== "room" || !gameState.answered) {
+                        clearInterval(roomStatusInterval); roomStatusInterval = null; return;
+                    }
+                    const client = initSupabaseClient();
+                    const { data } = await client.rpc("pyquest_get_round_status", {
+                        p_room_pin: currentRoomPin, p_question_index: gameState.index
+                    });
+                    const button = document.getElementById("btn-next-q");
+                    if (!button || !data) return;
+                    const ready = Boolean(data.all_answered) || (data.round_ends_at && Date.now() >= Date.parse(data.round_ends_at));
+                    button.disabled = !ready;
+                    button.textContent = ready ? (gameState.index >= gameState.deck.length - 1 ? "Ver Resultado Final →" : "Próxima Missão →") : `Aguardando respostas (${data.answered_count}/${data.player_count})...`;
+                    button.classList.toggle("opacity-50", !ready);
+                }, 1500);
+            } else if (btnNext && currentMode === "room") {
+                btnNext.classList.add("hidden");
             }
         }
 
@@ -1847,6 +1892,16 @@
             if (currentMode === "room") {
                 if (currentRoomData?.host_player_id !== getLocalPlayerId()) { showToast("Somente o anfitrião pode avançar a rodada."); return; }
                 const client = initSupabaseClient();
+                const { data: roundStatus, error: statusError } = await client.rpc("pyquest_get_round_status", {
+                    p_room_pin: currentRoomPin, p_question_index: gameState.index
+                });
+                if (statusError || !roundStatus) { showToast("Não consegui verificar as respostas da rodada."); return; }
+                const timeExpired = roundStatus.round_ends_at && Date.now() >= Date.parse(roundStatus.round_ends_at);
+                if (!roundStatus.all_answered && !timeExpired) {
+                    showToast(`Ainda aguardando respostas: ${roundStatus.answered_count}/${roundStatus.player_count}.`);
+                    return;
+                }
+                if (roomStatusInterval) { clearInterval(roomStatusInterval); roomStatusInterval = null; }
                 const nextIndex = gameState.index + 1;
                 if (nextIndex >= gameState.deck.length) {
                     const { error } = await client.from(SUPABASE_TABLE).update({ status: "finished", updated_at: new Date().toISOString() }).eq("pin", currentRoomPin).eq("host_player_id", getLocalPlayerId());
