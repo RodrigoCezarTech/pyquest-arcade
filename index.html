@@ -965,6 +965,16 @@
             const activePin = normalizePin(currentRoomPin || (currentRoomData && currentRoomData.pin) || "");
             if (activePin && cleanPin !== activePin) return;
 
+            // Pollings podem terminar fora de ordem. Nunca deixe uma resposta
+            // antiga do Supabase fazer o jogador voltar para uma missão anterior
+            // ou reabrir uma partida que já foi encerrada.
+            if (currentRoomData && normalizePin(currentRoomData.pin) === cleanPin) {
+                const oldIndex = Number(currentRoomData.current_question || 0);
+                const newIndex = Number(room.current_question || 0);
+                if (currentRoomData.status === "finished" && room.status !== "finished") return;
+                if (currentRoomData.status === "playing" && room.status === "playing" && newIndex < oldIndex) return;
+            }
+
             const existingPlayers = Array.isArray(currentRoomData?.players) ? currentRoomData.players : [];
             const incomingPlayers = Array.isArray(room.players) ? room.players : [];
             const mergedMap = new Map();
