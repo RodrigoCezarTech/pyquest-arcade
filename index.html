@@ -1767,62 +1767,61 @@
         }
 
         async function selectAnswer(chosenIdx, timedOut = false) {
-            if (!gameState || gameState.answered) return;
+            if (!gameState || gameState.answered || gameState.submitting) return;
             const shuffled = gameState.currentShuffledOptions || [];
             if (!timedOut && (chosenIdx < 0 || chosenIdx >= shuffled.length)) return;
-
-            // Trava somente a tela deste participante. A rodada compartilhada
-            // continua ativa para quem ainda não respondeu.
-            gameState.answered = true;
-            if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
 
             const c = gameState.deck[gameState.index];
             let isCorrect = !timedOut && Boolean(shuffled[chosenIdx]?.isCorrect);
             let pointsDelta = 0;
 
+            // No multiplayer, confirma primeiro no servidor. Se houver falha,
+            // os botões continuam disponíveis para uma nova tentativa.
             if (currentMode === "room" && currentRoomPin && !timedOut) {
-                const client = initSupabaseClient();
-                const { data, error } = await client.rpc("pyquest_submit_answer", {
-                    p_room_pin: currentRoomPin,
-                    p_question_index: gameState.index,
-                    p_player_id: getLocalPlayerId(),
-                    p_player_name: gameState.playerName,
-                    p_selected_option: Number(shuffled[chosenIdx].originalIndex)
-                });
-                if (error || !data) {
-                    gameState.answered = false;
-                    showToast("Não consegui registrar sua resposta. Tente novamente.");
-                    startQuestionTimer();
+                const opts = document.getElementById("q-options");
+                const buttons = opts ? Array.from(opts.querySelectorAll("button")) : [];
+                gameState.submitting = true;
+                buttons.forEach(btn => btn.disabled = true);
+                try {
+                    const client = initSupabaseClient();
+                    if (!client) throw new Error("Conexão com Supabase indisponível.");
+                    const { data, error } = await client.rpc("pyquest_submit_answer", {
+                        p_room_pin: currentRoomPin,
+                        p_question_index: gameState.index,
+                        p_player_id: getLocalPlayerId(),
+                        p_player_name: gameState.playerName,
+                        p_selected_option: Number(shuffled[chosenIdx].originalIndex)
+                    });
+                    if (error) throw error;
+                    if (!data) throw new Error("O servidor não retornou a confirmação da resposta.");
+                    isCorrect = Boolean(data.is_correct);
+                    pointsDelta = Number(data.points_awarded || 0);
+                    gameState.roomAnsweredCount = Number(data.answered_count || 0);
+                    gameState.roomPlayerCount = Number(data.player_count || 0);
+                } catch (err) {
+                    gameState.submitting = false;
+                    buttons.forEach(btn => btn.disabled = false);
+                    showToast("Falha ao registrar resposta: " + (err?.message || "erro desconhecido"));
                     return;
                 }
-                isCorrect = Boolean(data.is_correct);
-                pointsDelta = Number(data.points_awarded || 0);
-                if (isCorrect) {
-                    gameState.correct += 1;
-                    gameState.streak += 1;
-                    gameState.bestStreak = Math.max(gameState.bestStreak, gameState.streak);
-                    gameState.score += pointsDelta;
-                    SoundFX.correct();
-                } else {
-                    gameState.streak = 0;
-                    SoundFX.wrong();
-                }
-                gameState.roomAnsweredCount = Number(data.answered_count || 0);
-                gameState.roomPlayerCount = Number(data.player_count || 0);
-            } else if (currentMode === "solo") {
-                if (isCorrect) {
-                    gameState.correct += 1;
-                    gameState.streak += 1;
-                    gameState.bestStreak = Math.max(gameState.bestStreak, gameState.streak);
+                gameState.submitting = false;
+            }
+
+            gameState.answered = true;
+            if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+
+            if (isCorrect) {
+                gameState.correct += 1;
+                gameState.streak += 1;
+                gameState.bestStreak = Math.max(gameState.bestStreak, gameState.streak);
+                if (currentMode === "solo") {
                     pointsDelta = 500 + (gameState.timeLeft * 20) + ((gameState.streak - 1) * 100);
                     gameState.score += pointsDelta;
-                    SoundFX.correct();
                 } else {
-                    gameState.streak = 0;
-                    SoundFX.wrong();
+                    gameState.score += pointsDelta;
                 }
+                SoundFX.correct();
             } else {
-                // Timeout no multiplayer não é enviado como resposta válida.
                 gameState.streak = 0;
                 SoundFX.wrong();
             }
@@ -1845,9 +1844,7 @@
 
             if (fbBox && fbBadge && fbPoints && fbExp) {
                 fbBox.classList.remove("hidden");
-                fbBox.className = isCorrect
-                    ? "px-3.5 py-2.5 rounded-2xl border border-emerald-400/40 bg-emerald-950/85 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0"
-                    : "px-3.5 py-2.5 rounded-2xl border border-rose-400/40 bg-rose-950/85 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0";
+                fbBox.className = "px-3.5 py-2.5 rounded-2xl border " + (isCorrect ? "border-emerald-400/40 bg-emerald-950/85" : "border-rose-400/40 bg-rose-950/85") + " flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0";
                 fbBadge.className = "font-black text-sm sm:text-base " + (isCorrect ? "text-emerald-300" : "text-rose-300");
                 fbBadge.textContent = isCorrect ? "✓ Resposta Correta!" : (timedOut ? "⏰ Tempo Esgotado!" : "✕ Resposta Incorreta");
                 fbPoints.className = "font-mono text-xs sm:text-sm font-extrabold text-amber-300";
@@ -1855,35 +1852,38 @@
                 fbExp.textContent = c?.explanation || "";
             }
 
+            const isHost = currentMode !== "room" || currentRoomData?.host_player_id === getLocalPlayerId();
             if (btnNext) {
-                const isHost = currentMode !== "room" || currentRoomData?.host_player_id === getLocalPlayerId();
                 btnNext.textContent = currentMode === "room" ? "Aguardando participantes..." : (gameState.index >= gameState.deck.length - 1 ? "Ver Resultado Final →" : "Próxima Missão →");
                 btnNext.classList.toggle("hidden", currentMode === "room" && !isHost);
                 btnNext.disabled = currentMode === "room";
                 btnNext.classList.toggle("opacity-50", currentMode === "room");
             }
-
             updateHudStats();
 
-            if (currentMode === "room" && currentRoomPin && currentRoomData?.host_player_id === getLocalPlayerId()) {
+            if (currentMode === "room" && currentRoomPin && isHost) {
                 if (roomStatusInterval) clearInterval(roomStatusInterval);
                 roomStatusInterval = setInterval(async () => {
                     if (!gameState || currentMode !== "room" || !gameState.answered) {
                         clearInterval(roomStatusInterval); roomStatusInterval = null; return;
                     }
-                    const client = initSupabaseClient();
-                    const { data } = await client.rpc("pyquest_get_round_status", {
-                        p_room_pin: currentRoomPin, p_question_index: gameState.index
-                    });
-                    const button = document.getElementById("btn-next-q");
-                    if (!button || !data) return;
-                    const ready = Boolean(data.all_answered) || (data.round_ends_at && Date.now() >= Date.parse(data.round_ends_at));
-                    button.disabled = !ready;
-                    button.textContent = ready ? (gameState.index >= gameState.deck.length - 1 ? "Ver Resultado Final →" : "Próxima Missão →") : `Aguardando respostas (${data.answered_count}/${data.player_count})...`;
-                    button.classList.toggle("opacity-50", !ready);
-                }, 1500);
-            } else if (btnNext && currentMode === "room") {
-                btnNext.classList.add("hidden");
+                    try {
+                        const client = initSupabaseClient();
+                        const { data, error } = await client.rpc("pyquest_get_round_status", {
+                            p_room_pin: currentRoomPin, p_question_index: gameState.index
+                        });
+                        if (error) throw error;
+                        const button = document.getElementById("btn-next-q");
+                        if (!button || !data) return;
+                        const expired = data.round_ends_at && Date.now() >= Date.parse(data.round_ends_at);
+                        const ready = Boolean(data.all_answered) || Boolean(expired);
+                        button.disabled = !ready;
+                        button.textContent = ready ? (gameState.index >= gameState.deck.length - 1 ? "Ver Resultado Final →" : "Próxima Missão →") : `Aguardando respostas (${data.answered_count}/${data.player_count})...`;
+                        button.classList.toggle("opacity-50", !ready);
+                    } catch (err) {
+                        showToast("Erro ao consultar rodada: " + (err?.message || "erro"));
+                    }
+                }, 1200);
             }
         }
 
