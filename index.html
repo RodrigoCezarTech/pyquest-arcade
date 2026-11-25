@@ -1415,6 +1415,12 @@
         }
 
         function showToast(msg) {
+            const rawMsg = String(msg || "");
+            if (/failed to fetch|networkerror|load failed/i.test(rawMsg) && /supabase/i.test(rawMsg)) {
+                realtimeBlockedInSandbox = true;
+                initSupabaseClient();
+                return;
+            }
             const box = document.getElementById("toast-box");
             const txt = document.getElementById("toast-text");
             if (!box || !txt) return;
