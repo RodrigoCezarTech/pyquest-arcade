@@ -1140,6 +1140,21 @@
             }
         }
 
+        async function subscribeToRoomPin(pin) {
+            const cleanPin = normalizePin(pin);
+            if (!cleanPin) return;
+
+            currentRoomPin = cleanPin;
+            stopRoomPolling();
+
+            // Busca a sala imediatamente e mantém os jogadores sincronizados
+            // mesmo quando o canal Realtime não estiver disponível.
+            await pollRoomByPin(cleanPin);
+            roomPollingTimer = setInterval(() => {
+                pollRoomByPin(cleanPin);
+            }, 2000);
+        }
+
         async function upsertPlayerInRoom(pin, forcedStatus = null) {
             const cleanPin = normalizePin(pin);
             if (!cleanPin) return null;
