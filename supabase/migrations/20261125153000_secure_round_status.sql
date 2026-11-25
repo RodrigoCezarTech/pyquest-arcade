@@ -19,9 +19,10 @@ declare
   v_room_status text;
   v_current_question integer;
   v_round_ends_at timestamptz;
+  v_players jsonb;
 begin
   select status, current_question, round_ends_at, players
-    into v_room_status, v_current_question, v_round_ends_at, v_player_count
+    into v_room_status, v_current_question, v_round_ends_at, v_players
     from public.pyquest_rooms
    where pin = p_room_pin;
 
@@ -35,10 +36,7 @@ begin
      and question_index = p_question_index;
 
   select count(*) into v_player_count
-    from jsonb_array_elements(coalesce(
-      (select players from public.pyquest_rooms where pin = p_room_pin),
-      '[]'::jsonb
-    )) p
+    from jsonb_array_elements(coalesce(v_players, '[]'::jsonb)) p
    where coalesce(p->>'status', 'waiting') <> 'left';
 
   return jsonb_build_object(
