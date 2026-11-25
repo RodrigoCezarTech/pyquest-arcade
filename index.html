@@ -1,1383 +1,1004 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="pt-BR">
-  <head>
+<head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PyQuest Arcade</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=JetBrains+Mono:wght@500;700;800&display=swap"
-      rel="stylesheet"
-    />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet" />
     <style>
-      body {
-        font-family: "Inter", sans-serif;
-        background: radial-gradient(
-          circle at top,
-          #171936 0%,
-          #090b16 60%,
-          #05060d 100%
-        );
-        color: #f8fafc;
-        min-height: 100dvh;
-        overflow-x: hidden;
-      }
-      pre,
-      code,
-      .font-mono {
-        font-family: "JetBrains Mono", monospace;
-      }
-      .arcade-card {
-        background: rgba(15, 20, 42, 0.88);
-        backdrop-filter: blur(12px);
-        border: 1px solid rgba(129, 140, 248, 0.22);
-        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
-      }
-      .ans-btn {
-        transition:
-          transform 0.14s ease,
-          filter 0.14s ease,
-          box-shadow 0.14s ease;
-      }
-      .ans-btn:hover:not(:disabled) {
-        transform: translateY(-2px);
-        filter: brightness(1.08);
-      }
-      .ans-btn:active:not(:disabled) {
-        transform: translateY(0px) scale(0.99);
-      }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: radial-gradient(circle at top, #171936 0%, #090b16 60%, #05060d 100%);
+            color: #f8fafc;
+            min-height: 100dvh;
+            overflow-x: hidden;
+        }
+        pre, code, .font-mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .arcade-card {
+            background: rgba(15, 20, 42, 0.88);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(129, 140, 248, 0.22);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+        }
+        .ans-btn {
+            transition: transform 0.14s ease, filter 0.14s ease, box-shadow 0.14s ease;
+        }
+        .ans-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            filter: brightness(1.08);
+        }
+        .ans-btn:active:not(:disabled) {
+            transform: translateY(0px) scale(0.99);
+        }
     </style>
-  </head>
-  <body class="flex flex-col min-h-dvh">
-    <div
-      id="app-shell"
-      class="w-full max-w-[1600px] mx-auto flex-1 flex flex-col px-3 sm:px-6 py-2.5 sm:py-4 gap-2.5 sm:gap-3"
-    >
-      <!-- Cabeçalho Superior -->
-      <header
-        class="flex flex-wrap items-center justify-between gap-2 shrink-0"
-      >
-        <div class="flex items-center gap-2.5">
-          <div
-            id="header-avatar-badge"
-            class="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-lg overflow-hidden shrink-0"
-          ></div>
-          <div>
-            <h1
-              class="text-lg sm:text-2xl font-black tracking-tight leading-none"
-            >
-              PyQuest Arcade
-            </h1>
-            <p class="text-xs sm:text-sm text-slate-400 hidden sm:block">
-              Missões de código Python, pandas, lógica e trilhas por fase
-            </p>
-          </div>
-        </div>
-
-        <div class="flex flex-wrap items-center gap-1.5 sm:gap-2">
-          <span
-            id="now-playing-pill"
-            class="px-2.5 py-1.5 rounded-xl bg-slate-900/90 border border-slate-700 text-indigo-200 text-xs font-mono truncate max-w-[150px] sm:max-w-[260px]"
-          >
-            ♪ Trilha Pronta
-          </span>
-          <button
-            id="btn-sound"
-            type="button"
-            onclick="toggleSound()"
-            class="px-2.5 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 border border-slate-700 text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition"
-          >
-            <span id="sound-icon">🔊</span>
-            <span id="sound-label" class="hidden sm:inline">Som: Ligado</span>
-          </button>
-          <button
-            id="btn-home"
-            type="button"
-            onclick="returnHome()"
-            class="hidden px-2.5 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 border border-slate-700 text-xs sm:text-sm font-semibold transition"
-          >
-            Início
-          </button>
-        </div>
-      </header>
-
-      <!-- Mensagem / Notificação -->
-      <div
-        id="toast-box"
-        class="hidden px-4 py-2.5 rounded-2xl bg-indigo-950/90 border border-indigo-400/40 text-indigo-100 text-sm sm:text-base font-medium flex items-center justify-between gap-3 shrink-0"
-      >
-        <span id="toast-text"></span>
-        <button
-          type="button"
-          onclick="hideToast()"
-          class="text-xs uppercase tracking-wider text-indigo-300 hover:text-white font-bold"
-        >
-          Fechar
-        </button>
-      </div>
-
-      <!-- Tela Inicial -->
-      <section id="screen-home" class="my-auto py-1 sm:py-2">
-        <div class="arcade-card rounded-3xl p-5 sm:p-8 space-y-5">
-          <div class="flex flex-wrap items-center justify-between gap-3">
-            <span
-              class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-indigo-500/15 border border-indigo-400/30 text-indigo-300 text-xs sm:text-sm font-bold uppercase tracking-wider"
-            >
-              25 Missões Python &amp; Pandas • Atalhos de Teclado Ativos
-            </span>
-            <span class="text-xs sm:text-sm font-mono text-slate-400"
-              >Teclas: [1-4] Responder • [H] Dica • [Enter] Próxima</span
-            >
-          </div>
-
-          <div class="space-y-2">
-            <h2
-              class="text-3xl sm:text-5xl xl:text-6xl font-black leading-tight"
-            >
-              Treine
-              <span
-                class="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-fuchsia-400 to-amber-300"
-                >Python e Dados</span
-              >
-              com ritmo de arcade
-            </h2>
-            <p
-              class="text-slate-300 text-base sm:text-xl leading-relaxed max-w-4xl"
-            >
-              Escolha seu apelido, monte seu avatar, filtre por categoria (ou
-              jogue todos os casos), use dicas estratégicas, mantenha combos de
-              velocidade e dispute partidas solo ou por PIN.
-            </p>
-          </div>
-
-          <!-- Criador de Avatar Personalizado -->
-          <div
-            class="p-4 sm:p-5 rounded-2xl bg-slate-900/85 border border-slate-800 grid grid-cols-1 lg:grid-cols-12 gap-4 items-center"
-          >
-            <div class="lg:col-span-4 flex items-center gap-4">
-              <div
-                id="home-avatar-preview"
-                class="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-slate-950 border-2 border-indigo-400/40 flex items-center justify-center shrink-0 overflow-hidden shadow-lg"
-              ></div>
-              <div class="space-y-1 min-w-0">
-                <div
-                  class="text-xs font-mono uppercase tracking-wider text-indigo-300 font-bold"
-                >
-                  Seu Avatar
+</head>
+<body class="flex flex-col min-h-dvh">
+    <div id="app-shell" class="w-full max-w-[1600px] mx-auto flex-1 flex flex-col px-3 sm:px-6 py-2.5 sm:py-4 gap-2.5 sm:gap-3">
+        <!-- Cabeçalho Superior -->
+        <header class="flex flex-wrap items-center justify-between gap-2 shrink-0">
+            <div class="flex items-center gap-2.5">
+                <div id="header-avatar-badge" class="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-lg overflow-hidden shrink-0"></div>
+                <div>
+                    <h1 class="text-lg sm:text-2xl font-black tracking-tight leading-none">PyQuest Arcade</h1>
+                    <p class="text-xs sm:text-sm text-slate-400 hidden sm:block">Missões de código Python, pandas, lógica e trilhas por fase</p>
                 </div>
-                <div
-                  id="home-avatar-name"
-                  class="text-lg sm:text-xl font-black text-white truncate"
-                >
-                  Jogador Py
-                </div>
-                <button
-                  type="button"
-                  onclick="randomizeAvatar()"
-                  class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs sm:text-sm font-bold text-amber-300 transition"
-                >
-                  🎲 Sortear Estilo
+            </div>
+
+            <div class="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <span id="realtime-status-pill" class="px-2.5 py-1.5 rounded-xl bg-emerald-950/90 border border-emerald-500/40 text-emerald-200 text-xs font-mono">
+                    ● Supabase Online
+                </span>
+                <span id="now-playing-pill" class="px-2.5 py-1.5 rounded-xl bg-slate-900/90 border border-slate-700 text-indigo-200 text-xs font-mono truncate max-w-[150px] sm:max-w-[260px]">
+                    ♪ Trilha Pronta
+                </span>
+                <button id="btn-sound" type="button" onclick="toggleSound()" class="px-2.5 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 border border-slate-700 text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition">
+                    <span id="sound-icon">🔊</span>
+                    <span id="sound-label" class="hidden sm:inline">Som: Ligado</span>
                 </button>
-              </div>
+                <button id="btn-home" type="button" onclick="returnHome()" class="hidden px-2.5 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 border border-slate-700 text-xs sm:text-sm font-semibold transition">
+                    Início
+                </button>
             </div>
+        </header>
 
-            <div
-              class="lg:col-span-8 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4"
-            >
-              <div>
-                <label
-                  for="avatar-style"
-                  class="block text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-400 mb-1.5"
-                >
-                  Estilo / Rosto
-                </label>
-                <select
-                  id="avatar-style"
-                  onchange="updateAvatarFromControls()"
-                  class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 focus:border-indigo-400 focus:outline-none text-white text-sm sm:text-base font-semibold"
-                >
-                  <option value="bot">Robô Arcade</option>
-                  <option value="visor">Cyber Visor</option>
-                  <option value="cat">Gato Hacker</option>
-                  <option value="fox">Raposa Code</option>
-                </select>
-              </div>
-
-              <div>
-                <label
-                  for="avatar-theme"
-                  class="block text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-400 mb-1.5"
-                >
-                  Cor Neon
-                </label>
-                <select
-                  id="avatar-theme"
-                  onchange="updateAvatarFromControls()"
-                  class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 focus:border-indigo-400 focus:outline-none text-white text-sm sm:text-base font-semibold"
-                >
-                  <option value="indigo">Índigo &amp; Ciano</option>
-                  <option value="emerald">Esmeralda Matrix</option>
-                  <option value="amber">Âmbar Solar</option>
-                  <option value="rose">Rosa Synthwave</option>
-                </select>
-              </div>
-
-              <div>
-                <label
-                  for="avatar-gear"
-                  class="block text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-400 mb-1.5"
-                >
-                  Acessório / Símbolo
-                </label>
-                <select
-                  id="avatar-gear"
-                  onchange="updateAvatarFromControls()"
-                  class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 focus:border-indigo-400 focus:outline-none text-white text-sm sm:text-base font-semibold"
-                >
-                  <option value="antenna">Antena de Sinal</option>
-                  <option value="crown">Coroa Python</option>
-                  <option value="spark">Estrela Turbo</option>
-                  <option value="none">Sem Acessório</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          <!-- Configuração da Partida -->
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5">
-            <div>
-              <label
-                for="player-name"
-                class="block text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-400 mb-2"
-              >
-                Seu Apelido
-              </label>
-              <input
-                id="player-name"
-                type="text"
-                maxlength="20"
-                value="Jogador Py"
-                oninput="syncAvatarName()"
-                placeholder="Digite seu nome..."
-                class="w-full px-4 py-3.5 rounded-2xl bg-slate-900/90 border border-slate-700 focus:border-indigo-400 focus:outline-none text-white text-base sm:text-lg font-semibold"
-              />
-            </div>
-
-            <div>
-              <label
-                for="category-filter"
-                class="block text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-400 mb-2"
-              >
-                Categoria de Desafios
-              </label>
-              <select
-                id="category-filter"
-                class="w-full px-4 py-3.5 rounded-2xl bg-slate-900/90 border border-slate-700 focus:border-indigo-400 focus:outline-none text-white text-base sm:text-lg font-semibold"
-              >
-                <option value="all">Todas as Missões (25 casos)</option>
-                <option value="logic">
-                  Lógica &amp; Controle (if, elif, else, and, for, while, in)
-                </option>
-                <option value="structures">
-                  Estruturas &amp; Funções (list, dict, def, return, try, len,
-                  sum, upper)
-                </option>
-                <option value="pandas">
-                  Pandas &amp; DataFrames (read_csv, read_json, head, dropna,
-                  groupby, describe, shape, sort_values, columns)
-                </option>
-              </select>
-            </div>
-
-            <div>
-              <label
-                for="session-length"
-                class="block text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-400 mb-2"
-              >
-                Tamanho da Partida
-              </label>
-              <select
-                id="session-length"
-                class="w-full px-4 py-3.5 rounded-2xl bg-slate-900/90 border border-slate-700 focus:border-indigo-400 focus:outline-none text-white text-base sm:text-lg font-semibold"
-              >
-                <option value="10">Sprint Rápido (10 missões)</option>
-                <option value="15">Desafio Padrão (15 missões)</option>
-                <option value="all" selected>
-                  Maratona Completa (todos disponíveis)
-                </option>
-              </select>
-            </div>
-          </div>
-
-          <!-- Botões Principais -->
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 pt-1">
-            <button
-              type="button"
-              onclick="startSoloGame()"
-              class="sm:col-span-3 py-4 sm:py-5 px-6 rounded-2xl bg-gradient-to-r from-indigo-500 via-purple-600 to-pink-500 hover:brightness-110 font-black text-lg sm:text-xl shadow-lg shadow-indigo-950/70 transition"
-            >
-              ▶ Iniciar Partida Agora
-            </button>
-            <button
-              type="button"
-              onclick="openCreateRoomView()"
-              class="py-3.5 px-4 rounded-2xl bg-emerald-600/90 hover:bg-emerald-500 font-bold text-base sm:text-lg transition"
-            >
-              + Criar Sala (PIN)
-            </button>
-            <button
-              type="button"
-              onclick="openJoinRoomView()"
-              class="py-3.5 px-4 rounded-2xl bg-sky-600/90 hover:bg-sky-500 font-bold text-base sm:text-lg transition"
-            >
-              # Entrar com PIN
-            </button>
-            <button
-              type="button"
-              onclick="toggleSound()"
-              class="py-3.5 px-4 rounded-2xl bg-slate-800 hover:bg-slate-700 border border-slate-700 font-bold text-base sm:text-lg transition"
-            >
-              ♪ Alternar Trilha / Som
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <!-- Tela Criar / Entrar em Sala PIN -->
-      <section
-        id="screen-join"
-        class="hidden my-auto max-w-2xl w-full mx-auto arcade-card rounded-3xl p-6 sm:p-8 space-y-6"
-      >
-        <div class="flex items-center justify-between gap-2">
-          <h2 id="room-modal-title" class="text-2xl sm:text-3xl font-black">
-            Sala por PIN
-          </h2>
-          <button
-            type="button"
-            onclick="showScreen('screen-home')"
-            class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-sm font-bold"
-          >
-            Voltar
-          </button>
+        <!-- Mensagem / Notificação -->
+        <div id="toast-box" class="hidden px-4 py-2.5 rounded-2xl bg-indigo-950/90 border border-indigo-400/40 text-indigo-100 text-sm sm:text-base font-medium flex items-center justify-between gap-3 shrink-0">
+            <span id="toast-text"></span>
+            <button type="button" onclick="hideToast()" class="text-xs uppercase tracking-wider text-indigo-300 hover:text-white font-bold">Fechar</button>
         </div>
 
-        <div id="create-room-panel" class="hidden space-y-4">
-          <p class="text-slate-300 text-sm sm:text-base">
-            Gere um PIN local para disputar e registrar pontuações neste
-            navegador.
-          </p>
-          <div
-            class="p-4 rounded-2xl bg-slate-950/80 border border-indigo-400/30 flex items-center justify-between gap-4"
-          >
-            <div>
-              <div
-                class="text-xs uppercase tracking-wider text-slate-400 font-bold"
-              >
-                PIN da Sala
-              </div>
-              <div
-                id="generated-pin-display"
-                class="text-3xl font-mono font-black text-amber-300 tracking-widest"
-              >
-                ------
-              </div>
+        <!-- Tela Inicial -->
+        <section id="screen-home" class="my-auto py-1 sm:py-2">
+            <div class="arcade-card rounded-3xl p-5 sm:p-8 space-y-5">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <span class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-indigo-500/15 border border-indigo-400/30 text-indigo-300 text-xs sm:text-sm font-bold uppercase tracking-wider">
+                        25 Missões Python &amp; Pandas • Multiplayer em Tempo Real
+                    </span>
+                    <span class="text-xs sm:text-sm font-mono text-slate-400">Teclas: [1-4] Responder • [H] Dica • [Enter] Próxima</span>
+                </div>
+
+                <div class="space-y-2">
+                    <h2 class="text-3xl sm:text-5xl xl:text-6xl font-black leading-tight">
+                        Treine <span class="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-fuchsia-400 to-amber-300">Python e Dados</span> com ritmo de arcade
+                    </h2>
+                    <p class="text-slate-300 text-base sm:text-xl leading-relaxed max-w-4xl">
+                        Escolha seu apelido, monte seu avatar, filtre por categoria (ou jogue todos os casos), use dicas estratégicas, mantenha combos de velocidade e dispute partidas solo ou em salas ao vivo por PIN.
+                    </p>
+                </div>
+
+                <!-- Criador de Avatar Personalizado -->
+                <div class="p-4 sm:p-5 rounded-2xl bg-slate-900/85 border border-slate-800 grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
+                    <div class="lg:col-span-4 flex items-center gap-4">
+                        <div id="home-avatar-preview" class="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-slate-950 border-2 border-indigo-400/40 flex items-center justify-center shrink-0 overflow-hidden shadow-lg"></div>
+                        <div class="space-y-1 min-w-0">
+                            <div class="text-xs font-mono uppercase tracking-wider text-indigo-300 font-bold">Seu Avatar</div>
+                            <div id="home-avatar-name" class="text-lg sm:text-xl font-black text-white truncate">Jogador Py</div>
+                            <button type="button" onclick="randomizeAvatar()" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs sm:text-sm font-bold text-amber-300 transition">
+                                🎲 Sortear Estilo
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="lg:col-span-8 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+                        <div>
+                            <label for="avatar-style" class="block text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                                Estilo / Rosto
+                            </label>
+                            <select id="avatar-style" onchange="updateAvatarFromControls()" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 focus:border-indigo-400 focus:outline-none text-white text-sm sm:text-base font-semibold">
+                                <option value="bot">Robô Arcade</option>
+                                <option value="visor">Cyber Visor</option>
+                                <option value="cat">Gato Hacker</option>
+                                <option value="fox">Raposa Code</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label for="avatar-theme" class="block text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                                Cor Neon
+                            </label>
+                            <select id="avatar-theme" onchange="updateAvatarFromControls()" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 focus:border-indigo-400 focus:outline-none text-white text-sm sm:text-base font-semibold">
+                                <option value="indigo">Índigo &amp; Ciano</option>
+                                <option value="emerald">Esmeralda Matrix</option>
+                                <option value="amber">Âmbar Solar</option>
+                                <option value="rose">Rosa Synthwave</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label for="avatar-gear" class="block text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                                Acessório / Símbolo
+                            </label>
+                            <select id="avatar-gear" onchange="updateAvatarFromControls()" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 focus:border-indigo-400 focus:outline-none text-white text-sm sm:text-base font-semibold">
+                                <option value="antenna">Antena de Sinal</option>
+                                <option value="crown">Coroa Python</option>
+                                <option value="spark">Estrela Turbo</option>
+                                <option value="none">Sem Acessório</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Configuração da Partida -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5">
+                    <div>
+                        <label for="player-name" class="block text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-400 mb-2">
+                            Seu Apelido
+                        </label>
+                        <input id="player-name" type="text" maxlength="20" value="Jogador Py" oninput="syncAvatarName()" placeholder="Digite seu nome..." class="w-full px-4 py-3.5 rounded-2xl bg-slate-900/90 border border-slate-700 focus:border-indigo-400 focus:outline-none text-white text-base sm:text-lg font-semibold" />
+                    </div>
+
+                    <div>
+                        <label for="category-filter" class="block text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-400 mb-2">
+                            Categoria de Desafios
+                        </label>
+                        <select id="category-filter" class="w-full px-4 py-3.5 rounded-2xl bg-slate-900/90 border border-slate-700 focus:border-indigo-400 focus:outline-none text-white text-base sm:text-lg font-semibold">
+                            <option value="all">Todas as Missões (25 casos)</option>
+                            <option value="logic">Lógica &amp; Controle (if, elif, else, and, for, while, in)</option>
+                            <option value="structures">Estruturas &amp; Funções (list, dict, def, return, try, len, sum, upper)</option>
+                            <option value="pandas">Pandas &amp; DataFrames (read_csv, read_json, head, dropna, groupby, describe, shape, sort_values, columns)</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label for="session-length" class="block text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-400 mb-2">
+                            Tamanho da Partida
+                        </label>
+                        <select id="session-length" class="w-full px-4 py-3.5 rounded-2xl bg-slate-900/90 border border-slate-700 focus:border-indigo-400 focus:outline-none text-white text-base sm:text-lg font-semibold">
+                            <option value="10">Sprint Rápido (10 missões)</option>
+                            <option value="15">Desafio Padrão (15 missões)</option>
+                            <option value="all" selected>Maratona Completa (todos disponíveis)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Botões Principais -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 pt-1">
+                    <button type="button" onclick="startSoloGame()" class="sm:col-span-3 py-4 sm:py-5 px-6 rounded-2xl bg-gradient-to-r from-indigo-500 via-purple-600 to-pink-500 hover:brightness-110 font-black text-lg sm:text-xl shadow-lg shadow-indigo-950/70 transition">
+                        ▶ Iniciar Partida Agora
+                    </button>
+                    <button type="button" onclick="openCreateRoomView()" class="py-3.5 px-4 rounded-2xl bg-emerald-600/90 hover:bg-emerald-500 font-bold text-base sm:text-lg transition">
+                        + Criar Sala (PIN)
+                    </button>
+                    <button type="button" onclick="openJoinRoomView()" class="py-3.5 px-4 rounded-2xl bg-sky-600/90 hover:bg-sky-500 font-bold text-base sm:text-lg transition">
+                        # Entrar com PIN
+                    </button>
+                    <button type="button" onclick="toggleSound()" class="py-3.5 px-4 rounded-2xl bg-slate-800 hover:bg-slate-700 border border-slate-700 font-bold text-base sm:text-lg transition">
+                        ♪ Alternar Trilha / Som
+                    </button>
+                </div>
             </div>
-            <button
-              type="button"
-              onclick="copyRoomPin()"
-              class="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 font-bold text-sm"
-            >
-              Copiar PIN
-            </button>
-          </div>
-        </div>
+        </section>
 
-        <div id="join-room-panel" class="hidden space-y-3">
-          <label
-            for="room-pin-input"
-            class="block text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-400"
-          >
-            Digite o PIN da Sala
-          </label>
-          <input
-            id="room-pin-input"
-            type="text"
-            maxlength="8"
-            placeholder="Ex.: 482910"
-            class="w-full px-4 py-3.5 rounded-2xl bg-slate-900 border border-slate-700 focus:border-sky-400 focus:outline-none text-white font-mono text-xl font-bold tracking-widest uppercase"
-          />
-        </div>
-
-        <button
-          id="btn-start-room-game"
-          type="button"
-          onclick="startRoomGame()"
-          class="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:brightness-110 font-black text-lg text-slate-950 transition"
-        >
-          ▶ Iniciar Partida na Sala
-        </button>
-      </section>
-
-      <!-- Tela de Jogo (Full Viewport, Sem Rolagem para Próxima Missão) -->
-      <section
-        id="screen-game"
-        class="hidden flex-1 flex flex-col justify-between gap-2.5 min-h-0"
-      >
-        <!-- HUD Superior -->
-        <div
-          class="arcade-card rounded-2xl px-4 py-2.5 sm:px-5 sm:py-3 flex flex-wrap items-center justify-between gap-2 shrink-0"
-        >
-          <div class="flex items-center gap-3 min-w-0">
-            <div
-              id="hud-avatar"
-              class="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-slate-950 border border-indigo-400/30 flex items-center justify-center shrink-0 overflow-hidden"
-            ></div>
-            <div class="truncate">
-              <div class="flex items-center gap-2">
-                <span
-                  id="hud-name"
-                  class="font-extrabold text-sm sm:text-base xl:text-lg truncate"
-                  >Jogador Py</span
-                >
-                <span
-                  id="hud-mode-badge"
-                  class="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 text-xs font-bold shrink-0"
-                  >SOLO</span
-                >
-              </div>
-              <div class="text-xs sm:text-sm text-slate-400 truncate">
-                Missão
-                <span id="hud-q-num" class="text-white font-bold">1</span>/<span
-                  id="hud-q-total"
-                  class="text-white font-bold"
-                  >25</span
-                >
-                •
-                <span
-                  id="hud-track"
-                  class="text-cyan-300 font-mono font-semibold"
-                  >-</span
-                >
-              </div>
+        <!-- Tela Criar / Entrar em Sala PIN -->
+        <section id="screen-join" class="hidden my-auto max-w-2xl w-full mx-auto arcade-card rounded-3xl p-6 sm:p-8 space-y-6">
+            <div class="flex items-center justify-between gap-2">
+                <h2 id="room-modal-title" class="text-2xl sm:text-3xl font-black">Sala por PIN</h2>
+                <button type="button" onclick="showScreen('screen-home')" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-sm font-bold">
+                    Voltar
+                </button>
             </div>
-          </div>
 
-          <div class="flex items-center gap-3 sm:gap-5">
-            <div class="text-center">
-              <div
-                class="text-xs uppercase tracking-wider text-slate-400 font-bold"
-              >
-                Tempo
-              </div>
-              <div
-                id="hud-timer"
-                class="font-mono text-lg sm:text-xl font-black text-emerald-400 leading-tight"
-              >
-                25s
-              </div>
-            </div>
-            <div class="text-center">
-              <div
-                class="text-xs uppercase tracking-wider text-slate-400 font-bold"
-              >
-                Combo
-              </div>
-              <div
-                id="hud-streak"
-                class="font-mono text-lg sm:text-xl font-black text-amber-300 leading-tight"
-              >
-                0x
-              </div>
-            </div>
-            <div class="text-center">
-              <div
-                class="text-xs uppercase tracking-wider text-slate-400 font-bold"
-              >
-                Pontos
-              </div>
-              <div
-                id="hud-score"
-                class="font-mono text-lg sm:text-xl font-black text-indigo-300 leading-tight"
-              >
-                0
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Cartão Principal da Missão -->
-        <div
-          class="arcade-card rounded-2xl sm:rounded-3xl p-4 sm:p-6 flex-1 flex flex-col justify-between gap-3 sm:gap-4 min-h-0"
-        >
-          <div
-            class="flex flex-wrap items-center justify-between gap-2 shrink-0"
-          >
-            <span
-              id="q-topic-pill"
-              class="px-3.5 py-1 rounded-full bg-purple-500/20 border border-purple-400/30 text-purple-200 font-mono text-xs sm:text-base font-bold"
-            >
-              TEMA
-            </span>
-            <button
-              id="btn-hint"
-              type="button"
-              onclick="useHint()"
-              class="px-3.5 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-400/40 text-amber-200 text-xs sm:text-base font-bold transition"
-            >
-              💡 Dica (-100 pts)
-            </button>
-          </div>
-
-          <div
-            class="grid grid-cols-1 lg:grid-cols-12 gap-3 sm:gap-5 flex-1 min-h-0 items-stretch"
-          >
-            <!-- Coluna Esquerda: História, Ilustração e Amostra -->
-            <div
-              class="lg:col-span-5 flex flex-col justify-between gap-3 min-h-0"
-            >
-              <div class="space-y-1.5 sm:space-y-2">
-                <h2
-                  id="q-title"
-                  class="text-2xl sm:text-3xl xl:text-4xl font-black leading-snug"
-                >
-                  Título do Caso
-                </h2>
-                <p
-                  id="q-story"
-                  class="text-slate-300 text-base sm:text-lg xl:text-xl leading-relaxed"
-                >
-                  História do caso...
+            <div id="create-room-panel" class="hidden space-y-4">
+                <p class="text-slate-300 text-sm sm:text-base">
+                    Compartilhe este PIN com outras pessoas para entrarem na mesma sala e acompanharem o placar ao vivo via Supabase.
                 </p>
-              </div>
-
-              <div
-                id="q-illustration-wrap"
-                class="rounded-2xl border border-slate-800 bg-slate-950/75 p-3 sm:p-4 flex items-center gap-4 shrink-0"
-              >
-                <div
-                  id="q-illustration-svg"
-                  class="w-28 sm:w-44 h-20 sm:h-28 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-center shrink-0 overflow-hidden"
-                ></div>
-                <div class="space-y-1 min-w-0">
-                  <div
-                    id="q-illustration-tag"
-                    class="text-xs sm:text-base font-mono uppercase tracking-wider text-indigo-300 font-bold truncate"
-                  >
-                    CENA DO CASO
-                  </div>
-                  <div
-                    id="q-illustration-caption"
-                    class="text-xs sm:text-base text-slate-300 leading-snug line-clamp-3"
-                  >
-                    Ilustração de apoio ao cenário do código.
-                  </div>
+                <div class="p-4 rounded-2xl bg-slate-950/80 border border-indigo-400/30 flex items-center justify-between gap-4">
+                    <div>
+                        <div class="text-xs uppercase tracking-wider text-slate-400 font-bold">PIN da Sala</div>
+                        <div id="generated-pin-display" class="text-3xl font-mono font-black text-amber-300 tracking-widest">------</div>
+                    </div>
+                    <button type="button" onclick="copyRoomPin()" class="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 font-bold text-sm">
+                        Copiar PIN
+                    </button>
                 </div>
-              </div>
-
-              <div
-                id="q-data-wrap"
-                class="hidden overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2 shrink-0"
-              >
-                <div
-                  class="text-xs uppercase tracking-wider font-bold text-slate-400 mb-1"
-                >
-                  Amostra de Dados
-                </div>
-                <table
-                  id="q-data-table"
-                  class="w-full text-left text-xs sm:text-base font-mono"
-                ></table>
-              </div>
             </div>
 
-            <!-- Coluna Direita: Código, Alternativas e Feedback/Próxima Missão -->
-            <div
-              class="lg:col-span-7 flex flex-col justify-between gap-3 min-h-0"
-            >
-              <div
-                class="rounded-2xl bg-slate-950 border border-slate-800 overflow-hidden shrink-0"
-              >
-                <div
-                  class="px-4 py-2 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between text-xs sm:text-base text-slate-400 font-mono"
-                >
-                  <span>missao.py</span>
-                  <span>Complete ___</span>
+            <div id="join-room-panel" class="hidden space-y-3">
+                <label for="room-pin-input" class="block text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-400">
+                    Digite o PIN da Sala
+                </label>
+                <input id="room-pin-input" type="text" maxlength="8" placeholder="Ex.: 482910" class="w-full px-4 py-3.5 rounded-2xl bg-slate-900 border border-slate-700 focus:border-sky-400 focus:outline-none text-white font-mono text-xl font-bold tracking-widest uppercase" />
+            </div>
+
+            <div class="rounded-2xl bg-slate-950/70 border border-slate-800 p-4 space-y-2">
+                <div class="flex items-center justify-between text-xs uppercase tracking-wider text-slate-400 font-bold">
+                    <span>Jogadores na Sala</span>
+                    <span id="lobby-player-count" class="text-emerald-300 font-mono">0 conectados</span>
                 </div>
-                <pre
-                  id="q-code"
-                  class="px-4 py-3 sm:px-5 sm:py-4 text-base sm:text-lg xl:text-xl text-emerald-300 overflow-x-auto leading-relaxed"
-                ></pre>
-              </div>
+                <div id="lobby-players-list" class="flex flex-wrap gap-2 text-xs sm:text-sm"></div>
+            </div>
 
-              <div
-                id="q-hint-box"
-                class="hidden px-4 py-2.5 rounded-xl bg-amber-500/10 border border-amber-400/30 text-amber-100 text-xs sm:text-base shrink-0"
-              ></div>
+            <button id="btn-start-room-game" type="button" onclick="startRoomGame()" class="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:brightness-110 font-black text-lg text-slate-950 transition">
+                ▶ Iniciar Partida na Sala
+            </button>
+        </section>
 
-              <div
-                id="q-options"
-                class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3.5 shrink-0"
-              ></div>
-
-              <div
-                id="q-feedback"
-                class="hidden px-3.5 py-2.5 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0"
-              >
-                <div class="space-y-0.5 min-w-0">
-                  <div class="flex items-center gap-2">
-                    <span
-                      id="fb-badge"
-                      class="font-black text-sm sm:text-base"
-                    ></span>
-                    <span
-                      id="fb-points"
-                      class="font-mono text-xs sm:text-sm font-extrabold"
-                    ></span>
-                  </div>
-                  <p
-                    id="fb-explanation"
-                    class="text-xs sm:text-sm text-slate-200 leading-tight line-clamp-2"
-                  ></p>
+        <!-- Tela de Jogo (Full Viewport, Sem Rolagem para Próxima Missão) -->
+        <section id="screen-game" class="hidden flex-1 flex flex-col justify-between gap-2.5 min-h-0">
+            <!-- HUD Superior -->
+            <div class="arcade-card rounded-2xl px-4 py-2.5 sm:px-5 sm:py-3 flex flex-wrap items-center justify-between gap-2 shrink-0">
+                <div class="flex items-center gap-3 min-w-0">
+                    <div id="hud-avatar" class="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-slate-950 border border-indigo-400/30 flex items-center justify-center shrink-0 overflow-hidden"></div>
+                    <div class="truncate">
+                        <div class="flex items-center gap-2">
+                            <span id="hud-name" class="font-extrabold text-sm sm:text-base xl:text-lg truncate">Jogador Py</span>
+                            <span id="hud-mode-badge" class="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 text-xs font-bold shrink-0">SOLO</span>
+                        </div>
+                        <div class="text-xs sm:text-sm text-slate-400 truncate">
+                            Missão <span id="hud-q-num" class="text-white font-bold">1</span>/<span id="hud-q-total" class="text-white font-bold">25</span> •
+                            <span id="hud-track" class="text-cyan-300 font-mono font-semibold">-</span>
+                        </div>
+                    </div>
                 </div>
-                <button
-                  id="btn-next-q"
-                  type="button"
-                  onclick="nextQuestion()"
-                  class="px-4 py-2.5 rounded-xl bg-indigo-500 hover:bg-indigo-400 font-extrabold text-sm sm:text-base text-white shrink-0 transition"
-                >
-                  Próxima Missão →
+
+                <!-- Placar ao Vivo da Sala (quando em modo sala) -->
+                <div id="hud-live-scoreboard" class="hidden flex-wrap items-center gap-1.5 max-w-md"></div>
+
+                <div class="flex items-center gap-3 sm:gap-5">
+                    <div class="text-center">
+                        <div class="text-xs uppercase tracking-wider text-slate-400 font-bold">Tempo</div>
+                        <div id="hud-timer" class="font-mono text-lg sm:text-xl font-black text-emerald-400 leading-tight">25s</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-xs uppercase tracking-wider text-slate-400 font-bold">Combo</div>
+                        <div id="hud-streak" class="font-mono text-lg sm:text-xl font-black text-amber-300 leading-tight">0x</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-xs uppercase tracking-wider text-slate-400 font-bold">Pontos</div>
+                        <div id="hud-score" class="font-mono text-lg sm:text-xl font-black text-indigo-300 leading-tight">0</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cartão Principal da Missão -->
+            <div class="arcade-card rounded-2xl sm:rounded-3xl p-4 sm:p-6 flex-1 flex flex-col justify-between gap-3 sm:gap-4 min-h-0">
+                <div class="flex flex-wrap items-center justify-between gap-2 shrink-0">
+                    <span id="q-topic-pill" class="px-3.5 py-1 rounded-full bg-purple-500/20 border border-purple-400/30 text-purple-200 font-mono text-xs sm:text-base font-bold">
+                        TEMA
+                    </span>
+                    <button id="btn-hint" type="button" onclick="useHint()" class="px-3.5 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-400/40 text-amber-200 text-xs sm:text-base font-bold transition">
+                        💡 Dica (-100 pts)
+                    </button>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-3 sm:gap-5 flex-1 min-h-0 items-stretch">
+                    <!-- Coluna Esquerda: História, Ilustração e Amostra -->
+                    <div class="lg:col-span-5 flex flex-col justify-between gap-3 min-h-0">
+                        <div class="space-y-1.5 sm:space-y-2">
+                            <h2 id="q-title" class="text-2xl sm:text-3xl xl:text-4xl font-black leading-snug">Título do Caso</h2>
+                            <p id="q-story" class="text-slate-300 text-base sm:text-lg xl:text-xl leading-relaxed">História do caso...</p>
+                        </div>
+
+                        <div id="q-illustration-wrap" class="rounded-2xl border border-slate-800 bg-slate-950/75 p-3 sm:p-4 flex items-center gap-4 shrink-0">
+                            <div id="q-illustration-svg" class="w-28 sm:w-44 h-20 sm:h-28 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-center shrink-0 overflow-hidden"></div>
+                            <div class="space-y-1 min-w-0">
+                                <div id="q-illustration-tag" class="text-xs sm:text-base font-mono uppercase tracking-wider text-indigo-300 font-bold truncate">CENA DO CASO</div>
+                                <div id="q-illustration-caption" class="text-xs sm:text-base text-slate-300 leading-snug line-clamp-3">Ilustração de apoio ao cenário do código.</div>
+                            </div>
+                        </div>
+
+                        <div id="q-data-wrap" class="hidden overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2 shrink-0">
+                            <div class="text-xs uppercase tracking-wider font-bold text-slate-400 mb-1">Amostra de Dados</div>
+                            <table id="q-data-table" class="w-full text-left text-xs sm:text-base font-mono"></table>
+                        </div>
+                    </div>
+
+                    <!-- Coluna Direita: Código, Alternativas e Feedback/Próxima Missão -->
+                    <div class="lg:col-span-7 flex flex-col justify-between gap-3 min-h-0">
+                        <div class="rounded-2xl bg-slate-950 border border-slate-800 overflow-hidden shrink-0">
+                            <div class="px-4 py-2 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between text-xs sm:text-base text-slate-400 font-mono">
+                                <span>missao.py</span>
+                                <span>Complete ___</span>
+                            </div>
+                            <pre id="q-code" class="px-4 py-3 sm:px-5 sm:py-4 text-base sm:text-lg xl:text-xl text-emerald-300 overflow-x-auto leading-relaxed"></pre>
+                        </div>
+
+                        <div id="q-hint-box" class="hidden px-4 py-2.5 rounded-xl bg-amber-500/10 border border-amber-400/30 text-amber-100 text-xs sm:text-base shrink-0"></div>
+
+                        <div id="q-options" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3.5 shrink-0"></div>
+
+                        <div id="q-feedback" class="hidden px-3.5 py-2.5 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0">
+                            <div class="space-y-0.5 min-w-0">
+                                <div class="flex items-center gap-2">
+                                    <span id="fb-badge" class="font-black text-sm sm:text-base"></span>
+                                    <span id="fb-points" class="font-mono text-xs sm:text-sm font-extrabold"></span>
+                                </div>
+                                <p id="fb-explanation" class="text-xs sm:text-sm text-slate-200 leading-tight line-clamp-2"></p>
+                            </div>
+                            <button id="btn-next-q" type="button" onclick="nextQuestion()" class="px-4 py-2.5 rounded-xl bg-indigo-500 hover:bg-indigo-400 font-extrabold text-sm sm:text-base text-white shrink-0 transition">
+                                Próxima Missão →
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Barra de Progresso -->
+            <div class="w-full h-2 rounded-full bg-slate-900 border border-slate-800 overflow-hidden shrink-0">
+                <div id="hud-progress-bar" class="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 transition-all duration-300" style="width: 0%"></div>
+            </div>
+        </section>
+
+        <!-- Tela Final / Resultado -->
+        <section id="screen-result" class="hidden my-auto max-w-2xl w-full mx-auto arcade-card rounded-3xl p-6 sm:p-8 text-center space-y-6">
+            <div id="result-avatar" class="w-20 h-20 mx-auto rounded-2xl bg-slate-950 border-2 border-indigo-400/40 flex items-center justify-center shadow-lg overflow-hidden"></div>
+            <div class="space-y-1">
+                <div class="text-xs uppercase tracking-widest text-indigo-300 font-extrabold">Partida Concluída</div>
+                <h2 id="result-player-title" class="text-3xl sm:text-4xl font-black">Jogador Py</h2>
+                <p id="result-rank-badge" class="text-sm sm:text-base text-amber-300 font-bold"></p>
+            </div>
+
+            <div class="grid grid-cols-3 gap-3">
+                <div class="p-4 rounded-2xl bg-slate-900/90 border border-slate-800">
+                    <div class="text-xs uppercase text-slate-400 font-bold">Pontos</div>
+                    <div id="result-score" class="text-2xl sm:text-3xl font-mono font-black text-indigo-300 mt-1">0</div>
+                </div>
+                <div class="p-4 rounded-2xl bg-slate-900/90 border border-slate-800">
+                    <div class="text-xs uppercase text-slate-400 font-bold">Acertos</div>
+                    <div id="result-correct" class="text-2xl sm:text-3xl font-mono font-black text-emerald-400 mt-1">0/0</div>
+                </div>
+                <div class="p-4 rounded-2xl bg-slate-900/90 border border-slate-800">
+                    <div class="text-xs uppercase text-slate-400 font-bold">Maior Combo</div>
+                    <div id="result-streak" class="text-2xl sm:text-3xl font-mono font-black text-amber-300 mt-1">0x</div>
+                </div>
+            </div>
+
+            <div class="text-left rounded-2xl bg-slate-900/80 border border-slate-800 p-4 space-y-2">
+                <div id="leaderboard-title" class="text-xs uppercase tracking-wider text-slate-400 font-bold">Placar Local</div>
+                <div id="leaderboard-rows" class="space-y-1.5 text-sm"></div>
+            </div>
+
+            <div class="flex flex-col sm:flex-row gap-3">
+                <button type="button" onclick="replayCurrentMode()" class="flex-1 py-4 rounded-2xl bg-gradient-to-r from-indigo-500 via-purple-600 to-pink-500 hover:brightness-110 font-black text-base sm:text-lg transition">
+                    ↻ Jogar Novamente
                 </button>
-              </div>
+                <button type="button" onclick="returnHome()" class="py-4 px-5 rounded-2xl bg-slate-800 hover:bg-slate-700 border border-slate-700 font-bold text-base sm:text-lg transition">
+                    Menu Inicial
+                </button>
             </div>
-          </div>
-        </div>
-
-        <!-- Barra de Progresso -->
-        <div
-          class="w-full h-2 rounded-full bg-slate-900 border border-slate-800 overflow-hidden shrink-0"
-        >
-          <div
-            id="hud-progress-bar"
-            class="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 transition-all duration-300"
-            style="width: 0%"
-          ></div>
-        </div>
-      </section>
-
-      <!-- Tela Final / Resultado -->
-      <section
-        id="screen-result"
-        class="hidden my-auto max-w-2xl w-full mx-auto arcade-card rounded-3xl p-6 sm:p-8 text-center space-y-6"
-      >
-        <div
-          id="result-avatar"
-          class="w-20 h-20 mx-auto rounded-2xl bg-slate-950 border-2 border-indigo-400/40 flex items-center justify-center shadow-lg overflow-hidden"
-        ></div>
-        <div class="space-y-1">
-          <div
-            class="text-xs uppercase tracking-widest text-indigo-300 font-extrabold"
-          >
-            Partida Concluída
-          </div>
-          <h2 id="result-player-title" class="text-3xl sm:text-4xl font-black">
-            Jogador Py
-          </h2>
-          <p
-            id="result-rank-badge"
-            class="text-sm sm:text-base text-amber-300 font-bold"
-          ></p>
-        </div>
-
-        <div class="grid grid-cols-3 gap-3">
-          <div class="p-4 rounded-2xl bg-slate-900/90 border border-slate-800">
-            <div class="text-xs uppercase text-slate-400 font-bold">Pontos</div>
-            <div
-              id="result-score"
-              class="text-2xl sm:text-3xl font-mono font-black text-indigo-300 mt-1"
-            >
-              0
-            </div>
-          </div>
-          <div class="p-4 rounded-2xl bg-slate-900/90 border border-slate-800">
-            <div class="text-xs uppercase text-slate-400 font-bold">
-              Acertos
-            </div>
-            <div
-              id="result-correct"
-              class="text-2xl sm:text-3xl font-mono font-black text-emerald-400 mt-1"
-            >
-              0/0
-            </div>
-          </div>
-          <div class="p-4 rounded-2xl bg-slate-900/90 border border-slate-800">
-            <div class="text-xs uppercase text-slate-400 font-bold">
-              Maior Combo
-            </div>
-            <div
-              id="result-streak"
-              class="text-2xl sm:text-3xl font-mono font-black text-amber-300 mt-1"
-            >
-              0x
-            </div>
-          </div>
-        </div>
-
-        <div
-          class="text-left rounded-2xl bg-slate-900/80 border border-slate-800 p-4 space-y-2"
-        >
-          <div
-            class="text-xs uppercase tracking-wider text-slate-400 font-bold"
-          >
-            Placar Local
-          </div>
-          <div id="leaderboard-rows" class="space-y-1.5 text-sm"></div>
-        </div>
-
-        <div class="flex flex-col sm:flex-row gap-3">
-          <button
-            type="button"
-            onclick="replayCurrentMode()"
-            class="flex-1 py-4 rounded-2xl bg-gradient-to-r from-indigo-500 via-purple-600 to-pink-500 hover:brightness-110 font-black text-base sm:text-lg transition"
-          >
-            ↻ Jogar Novamente
-          </button>
-          <button
-            type="button"
-            onclick="returnHome()"
-            class="py-4 px-5 rounded-2xl bg-slate-800 hover:bg-slate-700 border border-slate-700 font-bold text-base sm:text-lg transition"
-          >
-            Menu Inicial
-          </button>
-        </div>
-      </section>
+        </section>
     </div>
 
     <script>
-      /* =====================================================================
-           1. BANCO DE 25 CASOS PYTHON & PANDAS + TRILHAS POR CASO
+        /* =====================================================================
+           0. CONFIGURAÇÃO SUPABASE MULTIPLAYER EM TEMPO REAL
            ===================================================================== */
-      const CHAT_AUDIO_TRACKS = [
-        "hitslab-gaming-game-minecraft-background-music-278382.mp3",
-        "mfcc-retro-arcade-game-music-297305.mp3",
-        "arpmedia-retro-arcade-game-music-577821.mp3",
-        "maksymmalko-roblox-minecraft-fortnite-video-game-music-358426 (1).mp3",
-        "tatamusic-game-game-music-599001.mp3",
-        "paulyudin-game-game-music-573991.mp3",
-        "sonican-thinking-time-219360.mp3",
-        "sonican-ticking-time-action-countdown-loop-283365.mp3",
-        "vadymkuznietsov-quiz-countdown-337785.mp3",
-        "hitslab-gaming-game-minecraft-background-music-278382_2.mp3",
-        "mfcc-retro-arcade-game-music-297305_2.mp3",
-        "paoloargento-quiz-countdown-194417.mp3",
-        "sonican-flash-quiz-loop-236356.mp3",
-        "hitslab-gaming-game-minecraft-background-music-278382 (1).mp3",
-        "hitslab-gaming-game-minecraft-background-music-278382_3.mp3",
-        "mfcc-retro-arcade-game-music-297305_3.mp3",
-        "arpmedia-retro-arcade-game-music-577821_2.mp3",
-        "maksymmalko-roblox-minecraft-fortnite-video-game-music-358426 (1)_2.mp3",
-        "maksymmalko-roblox-minecraft-fortnite-video-game-music-358426_2.mp3",
-        "tatamusic-game-game-music-599001_2.mp3",
-        "paulyudin-game-game-music-573991_2.mp3",
-        "sonican-thinking-time-219360_2.mp3",
-        "sonican-ticking-time-action-countdown-loop-283365_2.mp3",
-        "vadymkuznietsov-quiz-countdown-337785_2.mp3",
-      ];
+        const SUPABASE_URL = "https://htxzxqntmphrfnsnpttxy.supabase.co";
+        const SUPABASE_ANON_KEY = "sb_publishable_fkj8IxaAG2yUqKumWV3_Xw_eJgEENL8";
+        const SUPABASE_TABLE = "pyquest_rooms";
 
-      const CASES = [
-        {
-          id: 1,
-          category: "logic",
-          character: "Terturiano",
-          topic: "if / else",
-          scene: "pulse",
-          title: "Parada Cardíaca com Adrenalina",
-          story:
-            "Terturiano monitora um paciente com batimentos zerados (bpm == 0). Se não houver pulso, ele precisa aplicar 'adrenalina' imediatamente!",
-          code: 'bpm = 0\nif bpm == 0:\n    acao = ___\nelse:\n    acao = "monitorar"',
-          options: [
-            '"adrenalina"',
-            "adrenalina()",
-            'print("adrenalina")',
-            'bpm = "adrenalina"',
-          ],
-          correct: 0,
-          hint: "Quando bpm == 0, a resposta certa é uma string entre aspas com o nome do medicamento.",
-          explanation:
-            'Como a condição verifica bpm == 0, atribuímos a string "adrenalina" à variável acao.',
-        },
-        {
-          id: 2,
-          category: "logic",
-          character: "Alípio",
-          topic: "else",
-          scene: "rain",
-          title: "Alípio e o Guarda-Chuva",
-          story:
-            "Alípio olhou para o céu: está chovendo! Se chover, ele leva 'guarda-chuva'; senão (else), leva 'oculos_escuros'.",
-          code: 'chovendo = True\nif chovendo:\n    item = "guarda-chuva"\n___:\n    item = "oculos_escuros"',
-          options: ["else", "elif", "senao", "default"],
-          correct: 0,
-          hint: "A própria história já cita a palavra em inglês para 'senão' quando o if não executa.",
-          explanation:
-            "Em Python, o bloco alternativo quando o if é falso usa a palavra reservada else:.",
-        },
-        {
-          id: 3,
-          category: "pandas",
-          character: "Tibúrcio",
-          topic: "pd.read_json()",
-          scene: "json",
-          title: "Tibúrcio precisa ler um arquivo JSON",
-          story:
-            "Tibúrcio recebeu o arquivo 'dados_tiburcio.json' estruturado em JSON. Qual comando do pandas lê JSON corretamente?",
-          data: [
-            { chave: "analista", valor: '"Tibúrcio"', tipo: "str" },
-            { chave: "registros", valor: "1420", tipo: "int" },
-            { chave: "valido", valor: "true", tipo: "bool" },
-          ],
-          code: 'import pandas as pd\ncaminho = "dados_tiburcio.json"\ndf_tiburcio = ___(caminho)',
-          options: [
-            "pd.read_json",
-            "pd.read_csv",
-            "pd.open_json",
-            "json.read_csv",
-          ],
-          correct: 0,
-          hint: "O arquivo termina em .json e o prefixo do pandas é pd.read_...",
-          explanation:
-            "Para ler arquivos JSON com pandas, usamos pd.read_json(caminho).",
-        },
-        {
-          id: 4,
-          category: "pandas",
-          character: "Amnésio",
-          topic: "pd.read_csv()",
-          scene: "table",
-          title: "Amnésio precisa estruturar os dados CSV",
-          story:
-            "Amnésio encontrou uma tabela separada por vírgulas ('inventario_amnesio.csv') e quer carregá-la em um DataFrame estruturado df_amnesio.",
-          data: [
-            { id: "101", setor: "Norte", qtd: "48" },
-            { id: "102", setor: "Sul", qtd: "95" },
-            { id: "103", setor: "Leste", qtd: "72" },
-          ],
-          code: 'import pandas as pd\narquivo = "inventario_amnesio.csv"\ndf_amnesio = ___(arquivo)',
-          options: [
-            "pd.read_csv",
-            "pd.read_json",
-            "pd.struct_csv",
-            "csv.dataframe",
-          ],
-          correct: 0,
-          hint: "Qual função do pandas lê arquivos com extensão .csv para criar um DataFrame?",
-          explanation:
-            "O comando pd.read_csv(arquivo) lê dados separados por vírgula e os estrutura em DataFrame.",
-        },
-        {
-          id: 5,
-          category: "pandas",
-          character: "Tibúrcio",
-          topic: "df_.head()",
-          scene: "table",
-          title: "Inspecionando as 5 Primeiras Linhas de df_vendas",
-          story:
-            "Tibúrcio carregou o DataFrame df_vendas com 50 mil linhas e quer visualizar as primeiras linhas para conferir as colunas.",
-          data: [
-            { mes: "Jan", loja: "SP", receita: "18400" },
-            { mes: "Fev", loja: "RJ", receita: "21900" },
-            { mes: "Mar", loja: "MG", receita: "15300" },
-          ],
-          code: "primeiras = df_vendas.___()\nprint(primeiras)",
-          options: ["head", "top5", "first", "start"],
-          correct: 0,
-          hint: "Em inglês, 'cabeça / topo' de uma tabela DataFrame é chamado de head().",
-          explanation:
-            "O método df_vendas.head() retorna por padrão as 5 primeiras linhas de um DataFrame.",
-        },
-        {
-          id: 6,
-          category: "pandas",
-          character: "Genoveva",
-          topic: "df_.dropna()",
-          scene: "lab",
-          title: "Limpando Valores Nulos (NaN) em df_amostras",
-          story:
-            "Na análise de laboratório de Genoveva, várias medições vieram vazias (NaN). Ela precisa remover as linhas com valores ausentes de df_amostras.",
-          data: [
-            { tubo: "A1", ph: "7.1", pureza: "98%" },
-            { tubo: "A2", ph: "NaN", pureza: "94%" },
-            { tubo: "A3", ph: "6.8", pureza: "NaN" },
-          ],
-          code: "df_limpo = df_amostras.___()\nprint(len(df_limpo))",
-          options: ["dropna", "remove_null", "clean_nan", "drop_empty"],
-          correct: 0,
-          hint: "O nome do método junta 'drop' (descartar) com 'na' (valores ausentes).",
-          explanation:
-            "Em pandas, df_amostras.dropna() descarta todas as linhas que contêm valores nulos (NaN).",
-        },
-        {
-          id: 7,
-          category: "pandas",
-          character: "Amnésio",
-          topic: "df_.groupby()",
-          scene: "table",
-          title: "Agrupando Estoque por Setor em df_estoque",
-          story:
-            "Amnésio precisa somar a quantidade total de itens agrupando o DataFrame df_estoque pela coluna 'setor'.",
-          data: [
-            { setor: "Norte", itens: "120", status: "OK" },
-            { setor: "Sul", itens: "85", status: "Baixo" },
-            { setor: "Leste", itens: "140", status: "OK" },
-          ],
-          code: 'resumo = df_estoque.___("setor")["qtd"].sum()\nprint(resumo)',
-          options: ["groupby", "group_by", "cluster", "splitby"],
-          correct: 0,
-          hint: "No pandas, o método de agrupamento escreve-se tudo junto: groupby.",
-          explanation:
-            'O método df_estoque.groupby("setor") agrupa os registros por categoria antes de aplicar .sum().',
-        },
-        {
-          id: 8,
-          category: "pandas",
-          character: "Alípio",
-          topic: "df_.describe()",
-          scene: "rain",
-          title: "Resumo Estatístico Rápido de df_clima",
-          story:
-            "Alípio quer calcular de uma só vez média, desvio padrão, mínimo e máximo das temperaturas registradas em df_clima.",
-          data: [
-            { metrica: "media", temp_c: "24.6C", umidade: "71%" },
-            { metrica: "minimo", temp_c: "16.0C", umidade: "45%" },
-            { metrica: "maximo", temp_c: "33.2C", umidade: "92%" },
-          ],
-          code: "estatisticas = df_clima.___()\nprint(estatisticas)",
-          options: ["describe", "stats", "summary", "analyze"],
-          correct: 0,
-          hint: "Qual método em inglês 'descreve' estatisticamente todas as colunas numéricas de um DataFrame?",
-          explanation:
-            "df_clima.describe() gera automaticamente contagem, média, desvio padrão, mínimo e máximo.",
-        },
-        {
-          id: 9,
-          category: "structures",
-          character: "Genésio",
-          topic: "print()",
-          scene: "rocket",
-          title: "Painel de Ignição do Foguete",
-          story:
-            "Genésio está na cabine e precisa exibir 'DECOLAR!' no terminal de controle para confirmar a ignição.",
-          code: 'status = "DECOLAR!"\n___(status)',
-          options: ["print", "show", "echo", "write"],
-          correct: 0,
-          hint: "É a função clássica do Python para mostrar texto no console.",
-          explanation:
-            "A função padrão do Python para imprimir valores na tela é print().",
-        },
-        {
-          id: 10,
-          category: "logic",
-          character: "Terturiano",
-          topic: "for / range()",
-          scene: "pulse",
-          title: "Ciclo de Compressões de Emergência",
-          story:
-            "Para manter o ritmo, Terturiano programou um laço que repete exatamente 3 vezes a contagem de compressões.",
-          code: 'for pulso in ___:\n    print("Compressao", pulso)',
-          options: ["range(3)", "loop(3)", "repeat(3)", "3.times"],
-          correct: 0,
-          hint: "Em Python, geramos uma sequência numérica de 3 passos com range(...).",
-          explanation:
-            "range(3) gera a sequência 0, 1, 2 para executar o bloco 3 vezes no for.",
-        },
-        {
-          id: 11,
-          category: "logic",
-          character: "Eber",
-          topic: "and",
-          scene: "vault",
-          title: "Dupla Trava de Segurança",
-          story:
-            "O cofre de Eber só abre quando cracha_ok E pin_ok forem verdadeiros ao mesmo tempo.",
-          code: "cracha_ok = True\npin_ok = True\nif cracha_ok ___ pin_ok:\n    cofre_aberto = True",
-          options: ["and", "or", "not", "&"],
-          correct: 0,
-          hint: "Traduza 'E' ao mesmo tempo para a palavra-chave booleana do Python.",
-          explanation:
-            "O operador lógico and exige que ambas as condições sejam verdadeiras.",
-        },
-        {
-          id: 12,
-          category: "structures",
-          character: "Genoveva",
-          topic: "list.append()",
-          scene: "lab",
-          title: "Adicionando Reagente na Lista",
-          story:
-            'Genoveva criou a lista amostras = ["agua"] e quer adicionar "ferro" no final da lista.',
-          code: 'amostras = ["agua"]\namostras.___("ferro")',
-          options: ["append", "push", "add_end", "insert_last"],
-          correct: 0,
-          hint: "Qual método de lista em Python anexa um elemento ao final?",
-          explanation:
-            "O método .append() adiciona um novo item ao final de uma lista em Python.",
-        },
-        {
-          id: 13,
-          category: "structures",
-          character: "Percival",
-          topic: "dict",
-          scene: "lab",
-          title: "Dicionário de Tipos Sanguíneos",
-          story:
-            'Percival guardou os tipos sanguíneos em um dicionário e quer acessar a chave "O+".',
-          code: 'sangue = {"O+": 12, "A-": 4}\nqtd = sangue[___]',
-          options: ['"O+"', 'key("O+")', '.get("O+")', "O+"],
-          correct: 0,
-          hint: "A chave no dicionário é uma string exata que representa o tipo sanguíneo.",
-          explanation:
-            'Consultamos o valor de uma chave em um dicionário usando colchetes: sangue["O+"].',
-        },
-        {
-          id: 14,
-          category: "logic",
-          character: "Francisnaldo",
-          topic: "while",
-          scene: "sub",
-          title: "Submersão até a Profundidade Alvo",
-          story:
-            "O submarino de Francisnaldo desce enquanto a profundidade atual for menor que 200 metros.",
-          code: "profundidade = 0\n___ profundidade < 200:\n    profundidade += 50",
-          options: ["while", "until", "when", "repeat"],
-          correct: 0,
-          hint: "Qual comando repete o laço 'enquanto' uma condição for verdadeira?",
-          explanation:
-            "O laço while repete o bloco enquanto a condição profundidade < 200 for verdadeira.",
-        },
-        {
-          id: 15,
-          category: "structures",
-          character: "Genoveva",
-          topic: "def",
-          scene: "func",
-          title: "Declarando Função de Cálculo",
-          story:
-            "Genoveva quer definir uma função chamada calcular_dose que recebe o peso do paciente.",
-          code: "___ calcular_dose(peso):\n    return peso * 2",
-          options: ["def", "function", "func", "criar"],
-          correct: 0,
-          hint: "É a palavra curta (3 letras) usada em Python para definir uma função.",
-          explanation:
-            "Em Python, funções são declaradas com a palavra-chave def.",
-        },
-        {
-          id: 16,
-          category: "structures",
-          character: "Percival",
-          topic: "try / except",
-          scene: "vault",
-          title: "Proteção contra Divisão por Zero",
-          story:
-            "Percival tenta dividir energia por um sensor que pode valer zero sem derrubar o programa.",
-          code: "try:\n    taxa = 100 / sensor\n___ ZeroDivisionError:\n    taxa = 0",
-          options: ["except", "catch", "rescue", "error"],
-          correct: 0,
-          hint: "Após try:, o bloco que trata o erro em Python começa com qual palavra?",
-          explanation:
-            "Para capturar exceções em Python, usamos try: junto com except ...:.",
-        },
-        {
-          id: 17,
-          category: "pandas",
-          character: "Tibúrcio",
-          topic: "df_.shape",
-          scene: "table",
-          title: "Dimensões da Tabela df_log",
-          story:
-            "Tibúrcio quer verificar rapidamente quantas linhas e colunas possui o DataFrame df_log.",
-          data: [
-            { evento: "login", ip: "10.0.0.1", ok: "True" },
-            { evento: "query", ip: "10.0.0.2", ok: "True" },
-          ],
-          code: "linhas, colunas = df_log.___\nprint(linhas, colunas)",
-          options: ["shape", "size_xy", "dims()", "count_rc"],
-          correct: 0,
-          hint: "É um atributo (sem parênteses) que retorna uma tupla (linhas, colunas).",
-          explanation:
-            "O atributo df_log.shape retorna uma tupla (numero_de_linhas, numero_de_colunas).",
-        },
-        {
-          id: 18,
-          category: "pandas",
-          character: "Amnésio",
-          topic: "df_.sort_values()",
-          scene: "table",
-          title: "Ordenando df_ranking por Pontos",
-          story:
-            "Amnésio quer ordenar o DataFrame df_ranking de acordo com os valores da coluna 'pontos'.",
-          data: [
-            { jogador: "Ana", pontos: "900" },
-            { jogador: "Beto", pontos: "1450" },
-            { jogador: "Caio", pontos: "1100" },
-          ],
-          code: 'ordenado = df_ranking.___("pontos", ascending=False)\nprint(ordenado)',
-          options: ["sort_values", "order_by", "sort_df", "rank_values"],
-          correct: 0,
-          hint: "No pandas, ordenamos um DataFrame pelos valores de uma coluna com sort_values.",
-          explanation:
-            'df_ranking.sort_values("pontos", ascending=False) ordena do maior para o menor.',
-        },
-        {
-          id: 19,
-          category: "structures",
-          character: "Eber",
-          topic: "len()",
-          scene: "vault",
-          title: "Contando Pacotes Interceptados",
-          story:
-            "Eber armazenou os pacotes recebidos na lista pacotes e precisa saber quantos elementos existem nela.",
-          code: 'pacotes = ["pkt1", "pkt2", "pkt3", "pkt4"]\ntotal = ___(pacotes)\nprint(total)',
-          options: ["len", "count", "size", "length"],
-          correct: 0,
-          hint: "É a função embutida do Python que retorna o tamanho de listas, strings ou coleções.",
-          explanation:
-            "A função len(pacotes) retorna a quantidade total de itens na lista.",
-        },
-        {
-          id: 20,
-          category: "logic",
-          character: "Francisnaldo",
-          topic: "elif",
-          scene: "sub",
-          title: "Faixas de Pressão no Sonar",
-          story:
-            "Francisnaldo verifica se a pressão é 'alta'; se não for, testa uma segunda condição intermediária 'media' antes do else.",
-          code: 'if pressao == "alta":\n    alerta = "VERMELHO"\n___ pressao == "media":\n    alerta = "AMARELO"\nelse:\n    alerta = "VERDE"',
-          options: ["elif", "else if", "elseif", "when"],
-          correct: 0,
-          hint: "Em Python, 'senão se' escreve-se junto em quatro letras: elif.",
-          explanation:
-            "Usamos elif para adicionar condições intermediárias após um if inicial.",
-        },
-        {
-          id: 21,
-          category: "structures",
-          character: "Antéria",
-          topic: "str.upper()",
-          scene: "sat",
-          title: "Padronizando Códigos de Satélite com Antéria",
-          story:
-            "Antéria recebeu o sinal 'sat_alfa' em letras minúsculas e precisa convertê-lo todo para MAIÚSCULAS.",
-          code: 'sinal = "sat_alfa"\ncodigo = sinal.___()\nprint(codigo)',
-          options: ["upper", "capitalize", "to_upper", "caps"],
-          correct: 0,
-          hint: "Em inglês, letras maiúsculas são chamadas de 'upper case'.",
-          explanation:
-            "O método .upper() retorna uma nova string com todos os caracteres em maiúsculas.",
-        },
-        {
-          id: 22,
-          category: "structures",
-          character: "Girúndia",
-          topic: "sum()",
-          scene: "factory",
-          title: "Somando Lotes de Produção",
-          story:
-            "Girúndia quer somar todos os números da lista lotes = [12, 18, 25].",
-          code: "lotes = [12, 18, 25]\ntotal = ___(lotes)\nprint(total)",
-          options: ["sum", "total", "add_all", "count"],
-          correct: 0,
-          hint: "É a função nativa de 3 letras do Python para somar os itens de uma lista.",
-          explanation:
-            "A função embutida sum(lotes) calcula a soma de todos os elementos da lista.",
-        },
-        {
-          id: 23,
-          category: "structures",
-          character: "Arcídia",
-          topic: "return",
-          scene: "func",
-          title: "Devolvendo o Resultado da Função da Arcídia",
-          story:
-            "Arcídia escreveu uma função para calcular o dobro de uma chave, mas esqueceu a palavra que devolve o valor.",
-          code: "def dobrar(valor):\n    ___ valor * 2",
-          options: ["return", "yields", "output", "send"],
-          correct: 0,
-          hint: "Qual palavra reservada encerra a função e retorna um resultado para quem a chamou?",
-          explanation:
-            "Usamos return para devolver o resultado calculado dentro de uma função em Python.",
-        },
-        {
-          id: 24,
-          category: "pandas",
-          character: "Esmeraldina",
-          topic: "df_.columns",
-          scene: "gems",
-          title: "Listando Nomes das Colunas de df_gemas",
-          story:
-            "Esmeraldina abriu a tabela df_gemas e quer inspecionar os nomes de todas as colunas disponíveis.",
-          data: [
-            { pedra: "Esmeralda", quilates: "4.2", origem: "BA" },
-            { pedra: "Safira", quilates: "3.1", origem: "MG" },
-            { pedra: "Rubi", quilates: "2.8", origem: "GO" },
-          ],
-          code: "nomes_colunas = df_gemas.___\nprint(nomes_colunas)",
-          options: ["columns", "headers", "cols()", "fields"],
-          correct: 0,
-          hint: "É um atributo (sem parênteses) do DataFrame que guarda o índice de colunas.",
-          explanation:
-            "O atributo df_gemas.columns retorna os rótulos das colunas do DataFrame.",
-        },
-        {
-          id: 25,
-          category: "logic",
-          character: "Porfília",
-          topic: "in",
-          scene: "vault",
-          title: "Rastreando Suspeito na Lista da Porfília",
-          story:
-            "Porfília quer verificar se o código 'X99' está presente dentro da lista de registros suspeitos.",
-          code: 'suspeitos = ["A12", "X99", "B04"]\nif "X99" ___ suspeitos:\n    print("Alerta encontrado!")',
-          options: ["in", "has", "inside", "contains"],
-          correct: 0,
-          hint: "Qual operador de 2 letras verifica pertinência ('está em') dentro de uma lista Python?",
-          explanation:
-            "O operador in verifica se um elemento pertence a uma lista, tupla, string ou dicionário.",
-        },
-      ];
+        let supabaseClient = null;
+        let roomChannel = null;
+        let currentRoomData = null;
+        const localPlayerId = (() => {
+            const key = "pyquest_client_id_v1";
+            try {
+                let id = sessionStorage.getItem(key);
+                if (!id) {
+                    id = "p_" + Math.random().toString(36).slice(2, 10);
+                    sessionStorage.setItem(key, id);
+                }
+                return id;
+            } catch (_) {
+                return "p_" + Math.random().toString(36).slice(2, 10);
+            }
+        })();
 
-      /* =====================================================================
-           2. ILUSTRAÇÕES SVG TEMÁTICAS POR CASO
-           ===================================================================== */
-      function buildCaseIllustration(scene, caseId) {
-        const c = Number(caseId) || 1;
-        const scenes = {
-          pulse: {
-            tag: "MONITOR CARDÍACO",
-            caption: "Leitura de pulso e resposta imediata no painel clínico.",
-            svg: `<svg viewBox="0 0 160 96" class="w-full h-full"><rect x="8" y="10" width="144" height="76" rx="10" fill="#091326" stroke="#38bdf8" stroke-width="2"/><polyline points="16,54 44,54 56,28 70,70 84,42 96,54 144,54" fill="none" stroke="#34d399" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="132" cy="26" r="6" fill="#f43f5e"/></svg>`,
-          },
-          rain: {
-            tag: "CLIMA & METEOROLOGIA",
-            caption: "Nuvens carregadas e decisão condicional antes de sair.",
-            svg: `<svg viewBox="0 0 160 96" class="w-full h-full"><path d="M46 52a20 20 0 0 1 39-6 15 15 0 0 1 11 26H48a14 14 0 0 1-2-20z" fill="#334155" stroke="#94a3b8" stroke-width="2"/><line x1="56" y1="76" x2="50" y2="88" stroke="#38bdf8" stroke-width="3" stroke-linecap="round"/><line x1="80" y1="76" x2="74" y2="88" stroke="#38bdf8" stroke-width="3" stroke-linecap="round"/><line x1="104" y1="76" x2="98" y2="88" stroke="#38bdf8" stroke-width="3" stroke-linecap="round"/></svg>`,
-          },
-          json: {
-            tag: "ESTRUTURA JSON",
-            caption: "Chaves e valores estruturados para leitura em DataFrame.",
-            svg: `<svg viewBox="0 0 160 96" class="w-full h-full"><rect x="18" y="14" width="124" height="68" rx="10" fill="#111827" stroke="#818cf8" stroke-width="2"/><text x="32" y="42" fill="#a5b4fc" font-family="JetBrains Mono, monospace" font-size="18" font-weight="700">{ "id": ${c} }</text><text x="32" y="66" fill="#34d399" font-family="JetBrains Mono, monospace" font-size="13">"status": "ok"</text></svg>`,
-          },
-          table: {
-            tag: "TABELA DATAFRAME",
-            caption: "Linhas e colunas organizadas para análise com pandas.",
-            svg: `<svg viewBox="0 0 160 96" class="w-full h-full"><rect x="18" y="14" width="124" height="68" rx="8" fill="#0f172a" stroke="#38bdf8" stroke-width="2"/><line x1="18" y1="36" x2="142" y2="36" stroke="#38bdf8" stroke-width="2"/><line x1="18" y1="58" x2="142" y2="58" stroke="#1e293b" stroke-width="2"/><line x1="60" y1="14" x2="60" y2="82" stroke="#334155" stroke-width="2"/><line x1="102" y1="14" x2="102" y2="82" stroke="#334155" stroke-width="2"/></svg>`,
-          },
-          lab: {
-            tag: "BANCADA DE AMOSTRAS",
-            caption: "Tubos de ensaio, coleções e registros de laboratório.",
-            svg: `<svg viewBox="0 0 160 96" class="w-full h-full"><rect x="38" y="18" width="18" height="58" rx="9" fill="#0f172a" stroke="#34d399" stroke-width="2"/><rect x="40" y="46" width="14" height="28" rx="6" fill="#10b981" opacity="0.55"/><rect x="71" y="18" width="18" height="58" rx="9" fill="#0f172a" stroke="#38bdf8" stroke-width="2"/><rect x="73" y="38" width="14" height="36" rx="6" fill="#0ea5e9" opacity="0.55"/><rect x="104" y="18" width="18" height="58" rx="9" fill="#0f172a" stroke="#fbbf24" stroke-width="2"/><rect x="106" y="52" width="14" height="22" rx="6" fill="#f59e0b" opacity="0.55"/></svg>`,
-          },
-          rocket: {
-            tag: "CONTROLE DE LANÇAMENTO",
-            caption: "Telemetria e comandos de saída no painel da missão.",
-            svg: `<svg viewBox="0 0 160 96" class="w-full h-full"><polygon points="80,14 98,48 88,68 72,68 62,48" fill="#e2e8f0" stroke="#818cf8" stroke-width="2"/><circle cx="80" cy="44" r="7" fill="#38bdf8"/><polygon points="62,56 48,72 66,68" fill="#f97316"/><polygon points="98,56 112,72 94,68" fill="#f97316"/><polygon points="73,70 80,88 87,70" fill="#facc15"/></svg>`,
-          },
-          vault: {
-            tag: "TRAVA DE SEGURANÇA",
-            caption:
-              "Verificação de condições lógicas e integridade de execução.",
-            svg: `<svg viewBox="0 0 160 96" class="w-full h-full"><rect x="52" y="42" width="56" height="40" rx="8" fill="#1e293b" stroke="#fbbf24" stroke-width="2.5"/><path d="M62 42V30a18 18 0 0 1 36 0v12" fill="none" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"/><circle cx="80" cy="62" r="5" fill="#fbbf24"/></svg>`,
-          },
-          sub: {
-            tag: "SONAR SUBMARINO",
-            caption:
-              "Navegação em profundidade e leitura de faixas de pressão.",
-            svg: `<svg viewBox="0 0 160 96" class="w-full h-full"><rect x="34" y="40" width="84" height="26" rx="13" fill="#0f172a" stroke="#22d3ee" stroke-width="2.5"/><line x1="76" y1="40" x2="76" y2="20" stroke="#22d3ee" stroke-width="2.5"/><line x1="76" y1="20" x2="90" y2="20" stroke="#22d3ee" stroke-width="2.5"/><circle cx="128" cy="53" r="10" fill="none" stroke="#22d3ee" stroke-width="1.5" opacity="0.6"/><circle cx="128" cy="53" r="18" fill="none" stroke="#22d3ee" stroke-width="1.5" opacity="0.35"/></svg>`,
-          },
-          func: {
-            tag: "BLOCO DE FUNÇÃO",
-            caption: "Encapsulamento de regras e retorno de valores em Python.",
-            svg: `<svg viewBox="0 0 160 96" class="w-full h-full"><rect x="24" y="18" width="112" height="60" rx="10" fill="#0f172a" stroke="#c084fc" stroke-width="2"/><text x="36" y="45" fill="#e9d5ff" font-family="JetBrains Mono, monospace" font-size="14" font-weight="700">def fn(x):</text><text x="36" y="66" fill="#34d399" font-family="JetBrains Mono, monospace" font-size="13">  return res</text></svg>`,
-          },
-          sat: {
-            tag: "TELEMETRIA ORBITAL",
-            caption: "Padronização de sinais e códigos vindos da órbita.",
-            svg: `<svg viewBox="0 0 160 96" class="w-full h-full"><rect x="64" y="34" width="32" height="24" rx="5" fill="#1e293b" stroke="#38bdf8" stroke-width="2"/><rect x="22" y="28" width="32" height="16" rx="3" fill="#1d4ed8" stroke="#93c5fd" stroke-width="1.5"/><rect x="106" y="48" width="32" height="16" rx="3" fill="#1d4ed8" stroke="#93c5fd" stroke-width="1.5"/><path d="M116 74q16-14 28 0" fill="none" stroke="#34d399" stroke-width="2" stroke-linecap="round"/></svg>`,
-          },
-          factory: {
-            tag: "LINHA DE LOTES",
-            caption: "Contagem e soma de lotes produzidos na operação.",
-            svg: `<svg viewBox="0 0 160 96" class="w-full h-full"><rect x="26" y="46" width="24" height="24" rx="4" fill="#312e81" stroke="#818cf8" stroke-width="2"/><rect x="68" y="46" width="24" height="24" rx="4" fill="#312e81" stroke="#818cf8" stroke-width="2"/><rect x="110" y="46" width="24" height="24" rx="4" fill="#312e81" stroke="#818cf8" stroke-width="2"/><line x1="16" y1="74" x2="144" y2="74" stroke="#64748b" stroke-width="3" stroke-linecap="round"/></svg>`,
-          },
-          gems: {
-            tag: "CATÁLOGO DE GEMAS",
-            caption: "Inspeção de atributos e colunas de inventário.",
-            svg: `<svg viewBox="0 0 160 96" class="w-full h-full"><polygon points="80,18 114,42 80,80 46,42" fill="#064e3b" stroke="#34d399" stroke-width="2.5"/><polyline points="46,42 80,52 114,42" fill="none" stroke="#6ee7b7" stroke-width="1.8"/><line x1="80" y1="18" x2="80" y2="80" stroke="#6ee7b7" stroke-width="1.5"/></svg>`,
-          },
-        };
-        return scenes[scene] || scenes.func;
-      }
-
-      /* =====================================================================
-           3. CRIADOR E RENDERIZADOR DE AVATAR PERSONALIZADO (LOCALSTORAGE)
-           ===================================================================== */
-      const AVATAR_STORAGE_KEY = "pyquest_user_avatar_v1";
-      const AVATAR_THEMES = {
-        indigo: {
-          bg: "#1e1b4b",
-          stroke: "#818cf8",
-          accent: "#38bdf8",
-          eye: "#e0e7ff",
-        },
-        emerald: {
-          bg: "#064e3b",
-          stroke: "#34d399",
-          accent: "#a7f3d0",
-          eye: "#ecfdf5",
-        },
-        amber: {
-          bg: "#451a03",
-          stroke: "#fbbf24",
-          accent: "#fde68a",
-          eye: "#fffbeb",
-        },
-        rose: {
-          bg: "#4c0519",
-          stroke: "#fb7185",
-          accent: "#f472b6",
-          eye: "#ffe4e6",
-        },
-      };
-
-      let userAvatar = {
-        style: "bot",
-        theme: "indigo",
-        gear: "antenna",
-      };
-
-      function buildAvatarSvg(cfg = userAvatar) {
-        const t = AVATAR_THEMES[cfg.theme] || AVATAR_THEMES.indigo;
-        let gearSvg = "";
-        if (cfg.gear === "antenna") {
-          gearSvg = `<line x1="48" y1="22" x2="48" y2="10" stroke="${t.accent}" stroke-width="3" stroke-linecap="round"/><circle cx="48" cy="9" r="4" fill="${t.accent}"/>`;
-        } else if (cfg.gear === "crown") {
-          gearSvg = `<polygon points="28,22 35,11 48,18 61,11 68,22" fill="#fbbf24" stroke="#f59e0b" stroke-width="1.5"/>`;
-        } else if (cfg.gear === "spark") {
-          gearSvg = `<polygon points="76,12 79,19 86,22 79,25 76,32 73,25 66,22 73,19" fill="${t.accent}"/>`;
+        function isSupabaseConfigured() {
+            return Boolean(
+                SUPABASE_URL &&
+                SUPABASE_ANON_KEY &&
+                !SUPABASE_ANON_KEY.includes("...") &&
+                window.supabase &&
+                typeof window.supabase.createClient === "function"
+            );
         }
 
-        let faceSvg = "";
-        if (cfg.style === "visor") {
-          faceSvg = `
+        function initSupabaseClient() {
+            const pill = document.getElementById("realtime-status-pill");
+            if (!isSupabaseConfigured()) {
+                if (pill) {
+                    pill.textContent = "○ Cole a chave sb_publishable...";
+                    pill.className = "px-2.5 py-1.5 rounded-xl bg-amber-950/80 border border-amber-500/40 text-amber-200 text-xs font-mono";
+                }
+                return null;
+            }
+            if (!supabaseClient) {
+                supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            }
+            if (pill) {
+                pill.textContent = "● Supabase Online";
+                pill.className = "px-2.5 py-1.5 rounded-xl bg-emerald-950/90 border border-emerald-500/40 text-emerald-200 text-xs font-mono";
+            }
+            return supabaseClient;
+        }
+
+        function renderRoomPlayersUI(room) {
+            const players = Array.isArray(room?.players) ? [...room.players] : [];
+            players.sort((a, b) => (b.score || 0) - (a.score || 0));
+
+            const countEl = document.getElementById("lobby-player-count");
+            const listEl = document.getElementById("lobby-players-list");
+            if (countEl) countEl.textContent = `${players.length} conectado${players.length === 1 ? "" : "s"}`;
+            if (listEl) {
+                listEl.innerHTML = players.length
+                    ? players.map((p) => `
+                        <span class="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-slate-100 font-semibold flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                            <span>${escapeHtml(p.name || "Jogador")}</span>
+                            <span class="font-mono text-indigo-300">${p.score || 0} pts</span>
+                        </span>
+                    `).join("")
+                    : `<span class="text-slate-500">Aguardando jogadores entrarem com o PIN...</span>`;
+            }
+
+            const hudBoard = document.getElementById("hud-live-scoreboard");
+            if (hudBoard && currentMode === "room" && players.length) {
+                hudBoard.classList.remove("hidden");
+                hudBoard.classList.add("flex");
+                hudBoard.innerHTML = players.slice(0, 4).map((p, idx) => `
+                    <span class="px-2.5 py-1 rounded-lg bg-slate-900/90 border ${p.id === localPlayerId ? "border-indigo-400 text-white" : "border-slate-800 text-slate-300"} text-xs font-mono font-bold">
+                        #${idx + 1} ${escapeHtml(p.name || "Player")}: ${p.score || 0}
+                    </span>
+                `).join("");
+            } else if (hudBoard) {
+                hudBoard.classList.add("hidden");
+                hudBoard.classList.remove("flex");
+            }
+        }
+
+        async function subscribeToRoomPin(pin) {
+            const client = initSupabaseClient();
+            if (!client || !pin) return;
+
+            if (roomChannel) {
+                try {
+                    await client.removeChannel(roomChannel);
+                } catch (_) {}
+                roomChannel = null;
+            }
+
+            roomChannel = client
+                .channel(`room_${pin}`)
+                .on(
+                    "postgres_changes",
+                    {
+                        event: "*",
+                        schema: "public",
+                        table: SUPABASE_TABLE,
+                        filter: `pin=eq.${pin}`
+                    },
+                    (payload) => {
+                        const nextRoom = payload.new || payload.old;
+                        if (nextRoom && nextRoom.pin === pin) {
+                            currentRoomData = nextRoom;
+                            renderRoomPlayersUI(nextRoom);
+                        }
+                    }
+                )
+                .subscribe();
+        }
+
+        async function upsertPlayerInRoom(pin, patch = {}) {
+            const client = initSupabaseClient();
+            if (!client || !pin) return;
+
+            const nameVal = (document.getElementById("player-name")?.value || "Jogador Py").trim() || "Jogador Py";
+            const { data: existing, error: fetchErr } = await client
+                .from(SUPABASE_TABLE)
+                .select("*")
+                .eq("pin", pin)
+                .maybeSingle();
+
+            if (fetchErr) {
+                showToast("Erro ao acessar sala no Supabase: " + fetchErr.message);
+                return;
+            }
+
+            const prevPlayers = Array.isArray(existing?.players) ? [...existing.players] : [];
+            const idx = prevPlayers.findIndex((p) => p.id === localPlayerId);
+            const playerPayload = {
+                id: localPlayerId,
+                name: nameVal,
+                avatar: userAvatar,
+                score: patch.score !== undefined ? patch.score : (idx >= 0 ? prevPlayers[idx].score || 0 : 0),
+                correct: patch.correct !== undefined ? patch.correct : (idx >= 0 ? prevPlayers[idx].correct || 0 : 0),
+                streak: patch.streak !== undefined ? patch.streak : (idx >= 0 ? prevPlayers[idx].streak || 0 : 0),
+                updated_at: Date.now()
+            };
+
+            if (idx >= 0) {
+                prevPlayers[idx] = { ...prevPlayers[idx], ...playerPayload };
+            } else {
+                prevPlayers.push(playerPayload);
+            }
+
+            const rowToSave = {
+                pin,
+                status: patch.status || existing?.status || "waiting",
+                host_name: existing?.host_name || nameVal,
+                players: prevPlayers,
+                current_question: patch.current_question !== undefined ? patch.current_question : (existing?.current_question || 0),
+                updated_at: new Date().toISOString()
+            };
+
+            const { data: saved, error: saveErr } = await client
+                .from(SUPABASE_TABLE)
+                .upsert(rowToSave, { onConflict: "pin" })
+                .select()
+                .maybeSingle();
+
+            if (saveErr) {
+                showToast("Erro ao salvar sala no Supabase: " + saveErr.message);
+                return;
+            }
+
+            currentRoomData = saved || rowToSave;
+            renderRoomPlayersUI(currentRoomData);
+        }
+
+        /* =====================================================================
+           1. BANCO DE 25 CASOS PYTHON & PANDAS + TRILHAS POR CASO
+           ===================================================================== */
+        const CHAT_AUDIO_TRACKS = [
+            "hitslab-gaming-game-minecraft-background-music-278382.mp3",
+            "mfcc-retro-arcade-game-music-297305.mp3",
+            "arpmedia-retro-arcade-game-music-577821.mp3",
+            "maksymmalko-roblox-minecraft-fortnite-video-game-music-358426 (1).mp3",
+            "tatamusic-game-game-music-599001.mp3",
+            "paulyudin-game-game-music-573991.mp3",
+            "sonican-thinking-time-219360.mp3",
+            "sonican-ticking-time-action-countdown-loop-283365.mp3",
+            "vadymkuznietsov-quiz-countdown-337785.mp3",
+            "hitslab-gaming-game-minecraft-background-music-278382_2.mp3",
+            "mfcc-retro-arcade-game-music-297305_2.mp3",
+            "paoloargento-quiz-countdown-194417.mp3",
+            "sonican-flash-quiz-loop-236356.mp3",
+            "hitslab-gaming-game-minecraft-background-music-278382 (1).mp3",
+            "hitslab-gaming-game-minecraft-background-music-278382_3.mp3",
+            "mfcc-retro-arcade-game-music-297305_3.mp3",
+            "arpmedia-retro-arcade-game-music-577821_2.mp3",
+            "maksymmalko-roblox-minecraft-fortnite-video-game-music-358426 (1)_2.mp3",
+            "maksymmalko-roblox-minecraft-fortnite-video-game-music-358426_2.mp3",
+            "tatamusic-game-game-music-599001_2.mp3",
+            "paulyudin-game-game-music-573991_2.mp3",
+            "sonican-thinking-time-219360_2.mp3",
+            "sonican-ticking-time-action-countdown-loop-283365_2.mp3",
+            "vadymkuznietsov-quiz-countdown-337785_2.mp3"
+        ];
+
+        const CASES = [
+            {
+                id: 1, category: "logic", character: "Terturiano", topic: "if / else", scene: "pulse",
+                title: "Parada Cardíaca com Adrenalina",
+                story: "Terturiano monitora um paciente com batimentos zerados (bpm == 0). Se não houver pulso, ele precisa aplicar 'adrenalina' imediatamente!",
+                code: "bpm = 0\nif bpm == 0:\n    acao = ___\nelse:\n    acao = \"monitorar\"",
+                options: ["\"adrenalina\"", "adrenalina()", "print(\"adrenalina\")", "bpm = \"adrenalina\""],
+                correct: 0,
+                hint: "Quando bpm == 0, a resposta certa é uma string entre aspas com o nome do medicamento.",
+                explanation: "Como a condição verifica bpm == 0, atribuímos a string \"adrenalina\" à variável acao."
+            },
+            {
+                id: 2, category: "logic", character: "Alípio", topic: "else", scene: "rain",
+                title: "Alípio e o Guarda-Chuva",
+                story: "Alípio olhou para o céu: está chovendo! Se chover, ele leva 'guarda-chuva'; senão (else), leva 'oculos_escuros'.",
+                code: "chovendo = True\nif chovendo:\n    item = \"guarda-chuva\"\n___:\n    item = \"oculos_escuros\"",
+                options: ["else", "elif", "senao", "default"],
+                correct: 0,
+                hint: "A própria história já cita a palavra em inglês para 'senão' quando o if não executa.",
+                explanation: "Em Python, o bloco alternativo quando o if é falso usa a palavra reservada else:."
+            },
+            {
+                id: 3, category: "pandas", character: "Tibúrcio", topic: "pd.read_json()", scene: "json",
+                title: "Tibúrcio precisa ler um arquivo JSON",
+                story: "Tibúrcio recebeu o arquivo 'dados_tiburcio.json' estruturado em JSON. Qual comando do pandas lê JSON corretamente?",
+                data: [
+                    { chave: "analista", valor: "\"Tibúrcio\"", tipo: "str" },
+                    { chave: "registros", valor: "1420", tipo: "int" },
+                    { chave: "valido", valor: "true", tipo: "bool" }
+                ],
+                code: "import pandas as pd\ncaminho = \"dados_tiburcio.json\"\ndf_tiburcio = ___(caminho)",
+                options: ["pd.read_json", "pd.read_csv", "pd.open_json", "json.read_csv"],
+                correct: 0,
+                hint: "O arquivo termina em .json e o prefixo do pandas é pd.read_...",
+                explanation: "Para ler arquivos JSON com pandas, usamos pd.read_json(caminho)."
+            },
+            {
+                id: 4, category: "pandas", character: "Amnésio", topic: "pd.read_csv()", scene: "table",
+                title: "Amnésio precisa estruturar os dados CSV",
+                story: "Amnésio encontrou uma tabela separada por vírgulas ('inventario_amnesio.csv') e quer carregá-la em um DataFrame estruturado df_amnesio.",
+                data: [
+                    { id: "101", setor: "Norte", qtd: "48" },
+                    { id: "102", setor: "Sul", qtd: "95" },
+                    { id: "103", setor: "Leste", qtd: "72" }
+                ],
+                code: "import pandas as pd\narquivo = \"inventario_amnesio.csv\"\ndf_amnesio = ___(arquivo)",
+                options: ["pd.read_csv", "pd.read_json", "pd.struct_csv", "csv.dataframe"],
+                correct: 0,
+                hint: "Qual função do pandas lê arquivos com extensão .csv para criar um DataFrame?",
+                explanation: "O comando pd.read_csv(arquivo) lê dados separados por vírgula e os estrutura em DataFrame."
+            },
+            {
+                id: 5, category: "pandas", character: "Tibúrcio", topic: "df_.head()", scene: "table",
+                title: "Inspecionando as 5 Primeiras Linhas de df_vendas",
+                story: "Tibúrcio carregou o DataFrame df_vendas com 50 mil linhas e quer visualizar as primeiras linhas para conferir as colunas.",
+                data: [
+                    { mes: "Jan", loja: "SP", receita: "18400" },
+                    { mes: "Fev", loja: "RJ", receita: "21900" },
+                    { mes: "Mar", loja: "MG", receita: "15300" }
+                ],
+                code: "primeiras = df_vendas.___()\nprint(primeiras)",
+                options: ["head", "top5", "first", "start"],
+                correct: 0,
+                hint: "Em inglês, 'cabeça / topo' de uma tabela DataFrame é chamado de head().",
+                explanation: "O método df_vendas.head() retorna por padrão as 5 primeiras linhas de um DataFrame."
+            },
+            {
+                id: 6, category: "pandas", character: "Genoveva", topic: "df_.dropna()", scene: "lab",
+                title: "Limpando Valores Nulos (NaN) em df_amostras",
+                story: "Na análise de laboratório de Genoveva, várias medições vieram vazias (NaN). Ela precisa remover as linhas com valores ausentes de df_amostras.",
+                data: [
+                    { tubo: "A1", ph: "7.1", pureza: "98%" },
+                    { tubo: "A2", ph: "NaN", pureza: "94%" },
+                    { tubo: "A3", ph: "6.8", pureza: "NaN" }
+                ],
+                code: "df_limpo = df_amostras.___()\nprint(len(df_limpo))",
+                options: ["dropna", "remove_null", "clean_nan", "drop_empty"],
+                correct: 0,
+                hint: "O nome do método junta 'drop' (descartar) com 'na' (valores ausentes).",
+                explanation: "Em pandas, df_amostras.dropna() descarta todas as linhas que contêm valores nulos (NaN)."
+            },
+            {
+                id: 7, category: "pandas", character: "Amnésio", topic: "df_.groupby()", scene: "table",
+                title: "Agrupando Estoque por Setor em df_estoque",
+                story: "Amnésio precisa somar a quantidade total de itens agrupando o DataFrame df_estoque pela coluna 'setor'.",
+                data: [
+                    { setor: "Norte", itens: "120", status: "OK" },
+                    { setor: "Sul", itens: "85", status: "Baixo" },
+                    { setor: "Leste", itens: "140", status: "OK" }
+                ],
+                code: "resumo = df_estoque.___(\"setor\")[\"qtd\"].sum()\nprint(resumo)",
+                options: ["groupby", "group_by", "cluster", "splitby"],
+                correct: 0,
+                hint: "No pandas, o método de agrupamento escreve-se tudo junto: groupby.",
+                explanation: "O método df_estoque.groupby(\"setor\") agrupa os registros por categoria antes de aplicar .sum()."
+            },
+            {
+                id: 8, category: "pandas", character: "Alípio", topic: "df_.describe()", scene: "rain",
+                title: "Resumo Estatístico Rápido de df_clima",
+                story: "Alípio quer calcular de uma só vez média, desvio padrão, mínimo e máximo das temperaturas registradas em df_clima.",
+                data: [
+                    { metrica: "media", temp_c: "24.6C", umidade: "71%" },
+                    { metrica: "minimo", temp_c: "16.0C", umidade: "45%" },
+                    { metrica: "maximo", temp_c: "33.2C", umidade: "92%" }
+                ],
+                code: "estatisticas = df_clima.___()\nprint(estatisticas)",
+                options: ["describe", "stats", "summary", "analyze"],
+                correct: 0,
+                hint: "Qual método em inglês 'descreve' estatisticamente todas as colunas numéricas de um DataFrame?",
+                explanation: "df_clima.describe() gera automaticamente contagem, média, desvio padrão, mínimo e máximo."
+            },
+            {
+                id: 9, category: "structures", character: "Genésio", topic: "print()", scene: "rocket",
+                title: "Painel de Ignição do Foguete",
+                story: "Genésio está na cabine e precisa exibir 'DECOLAR!' no terminal de controle para confirmar a ignição.",
+                code: "status = \"DECOLAR!\"\n___(status)",
+                options: ["print", "show", "echo", "write"],
+                correct: 0,
+                hint: "É a função clássica do Python para mostrar texto no console.",
+                explanation: "A função padrão do Python para imprimir valores na tela é print()."
+            },
+            {
+                id: 10, category: "logic", character: "Terturiano", topic: "for / range()", scene: "pulse",
+                title: "Ciclo de Compressões de Emergência",
+                story: "Para manter o ritmo, Terturiano programou um laço que repete exatamente 3 vezes a contagem de compressões.",
+                code: "for pulso in ___:\n    print(\"Compressao\", pulso)",
+                options: ["range(3)", "loop(3)", "repeat(3)", "3.times"],
+                correct: 0,
+                hint: "Em Python, geramos uma sequência numérica de 3 passos com range(...).",
+                explanation: "range(3) gera a sequência 0, 1, 2 para executar o bloco 3 vezes no for."
+            },
+            {
+                id: 11, category: "logic", character: "Eber", topic: "and", scene: "vault",
+                title: "Dupla Trava de Segurança",
+                story: "O cofre de Eber só abre quando cracha_ok E pin_ok forem verdadeiros ao mesmo tempo.",
+                code: "cracha_ok = True\npin_ok = True\nif cracha_ok ___ pin_ok:\n    cofre_aberto = True",
+                options: ["and", "or", "not", "&"],
+                correct: 0,
+                hint: "Traduza 'E' ao mesmo tempo para a palavra-chave booleana do Python.",
+                explanation: "O operador lógico and exige que ambas as condições sejam verdadeiras."
+            },
+            {
+                id: 12, category: "structures", character: "Genoveva", topic: "list.append()", scene: "lab",
+                title: "Adicionando Reagente na Lista",
+                story: "Genoveva criou a lista amostras = [\"agua\"] e quer adicionar \"ferro\" no final da lista.",
+                code: "amostras = [\"agua\"]\namostras.___(\"ferro\")",
+                options: ["append", "push", "add_end", "insert_last"],
+                correct: 0,
+                hint: "Qual método de lista em Python anexa um elemento ao final?",
+                explanation: "O método .append() adiciona um novo item ao final de uma lista em Python."
+            },
+            {
+                id: 13, category: "structures", character: "Percival", topic: "dict", scene: "lab",
+                title: "Dicionário de Tipos Sanguíneos",
+                story: "Percival guardou os tipos sanguíneos em um dicionário e quer acessar a chave \"O+\".",
+                code: "sangue = {\"O+\": 12, \"A-\": 4}\nqtd = sangue[___]",
+                options: ["\"O+\"", "key(\"O+\")", ".get(\"O+\")", "O+"],
+                correct: 0,
+                hint: "A chave no dicionário é uma string exata que representa o tipo sanguíneo.",
+                explanation: "Consultamos o valor de uma chave em um dicionário usando colchetes: sangue[\"O+\"]."
+            },
+            {
+                id: 14, category: "logic", character: "Francisnaldo", topic: "while", scene: "sub",
+                title: "Submersão até a Profundidade Alvo",
+                story: "O submarino de Francisnaldo desce enquanto a profundidade atual for menor que 200 metros.",
+                code: "profundidade = 0\n___ profundidade < 200:\n    profundidade += 50",
+                options: ["while", "until", "when", "repeat"],
+                correct: 0,
+                hint: "Qual comando repete o laço 'enquanto' uma condição for verdadeira?",
+                explanation: "O laço while repete o bloco enquanto a condição profundidade < 200 for verdadeira."
+            },
+            {
+                id: 15, category: "structures", character: "Genoveva", topic: "def", scene: "func",
+                title: "Declarando Função de Cálculo",
+                story: "Genoveva quer definir uma função chamada calcular_dose que recebe o peso do paciente.",
+                code: "___ calcular_dose(peso):\n    return peso * 2",
+                options: ["def", "function", "func", "criar"],
+                correct: 0,
+                hint: "É a palavra curta (3 letras) usada em Python para definir uma função.",
+                explanation: "Em Python, funções são declaradas com a palavra-chave def."
+            },
+            {
+                id: 16, category: "structures", character: "Percival", topic: "try / except", scene: "vault",
+                title: "Proteção contra Divisão por Zero",
+                story: "Percival tenta dividir energia por um sensor que pode valer zero sem derrubar o programa.",
+                code: "try:\n    taxa = 100 / sensor\n___ ZeroDivisionError:\n    taxa = 0",
+                options: ["except", "catch", "rescue", "error"],
+                correct: 0,
+                hint: "Após try:, o bloco que trata o erro em Python começa com qual palavra?",
+                explanation: "Para capturar exceções em Python, usamos try: junto com except ...:."
+            },
+            {
+                id: 17, category: "pandas", character: "Tibúrcio", topic: "df_.shape", scene: "table",
+                title: "Dimensões da Tabela df_log",
+                story: "Tibúrcio quer verificar rapidamente quantas linhas e colunas possui o DataFrame df_log.",
+                data: [
+                    { evento: "login", ip: "10.0.0.1", ok: "True" },
+                    { evento: "query", ip: "10.0.0.2", ok: "True" }
+                ],
+                code: "linhas, colunas = df_log.___\nprint(linhas, colunas)",
+                options: ["shape", "size_xy", "dims()", "count_rc"],
+                correct: 0,
+                hint: "É um atributo (sem parênteses) que retorna uma tupla (linhas, colunas).",
+                explanation: "O atributo df_log.shape retorna uma tupla (numero_de_linhas, numero_de_colunas)."
+            },
+            {
+                id: 18, category: "pandas", character: "Amnésio", topic: "df_.sort_values()", scene: "table",
+                title: "Ordenando df_ranking por Pontos",
+                story: "Amnésio quer ordenar o DataFrame df_ranking de acordo com os valores da coluna 'pontos'.",
+                data: [
+                    { jogador: "Ana", pontos: "900" },
+                    { jogador: "Beto", pontos: "1450" },
+                    { jogador: "Caio", pontos: "1100" }
+                ],
+                code: "ordenado = df_ranking.___(\"pontos\", ascending=False)\nprint(ordenado)",
+                options: ["sort_values", "order_by", "sort_df", "rank_values"],
+                correct: 0,
+                hint: "No pandas, ordenamos um DataFrame pelos valores de uma coluna com sort_values.",
+                explanation: "df_ranking.sort_values(\"pontos\", ascending=False) ordena do maior para o menor."
+            },
+            {
+                id: 19, category: "structures", character: "Eber", topic: "len()", scene: "vault",
+                title: "Contando Pacotes Interceptados",
+                story: "Eber armazenou os pacotes recebidos na lista pacotes e precisa saber quantos elementos existem nela.",
+                code: "pacotes = [\"pkt1\", \"pkt2\", \"pkt3\", \"pkt4\"]\ntotal = ___(pacotes)\nprint(total)",
+                options: ["len", "count", "size", "length"],
+                correct: 0,
+                hint: "É a função embutida do Python que retorna o tamanho de listas, strings ou coleções.",
+                explanation: "A função len(pacotes) retorna a quantidade total de itens na lista."
+            },
+            {
+                id: 20, category: "logic", character: "Francisnaldo", topic: "elif", scene: "sub",
+                title: "Faixas de Pressão no Sonar",
+                story: "Francisnaldo verifica se a pressão é 'alta'; se não for, testa uma segunda condição intermediária 'media' antes do else.",
+                code: "if pressao == \"alta\":\n    alerta = \"VERMELHO\"\n___ pressao == \"media\":\n    alerta = \"AMARELO\"\nelse:\n    alerta = \"VERDE\"",
+                options: ["elif", "else if", "elseif", "when"],
+                correct: 0,
+                hint: "Em Python, 'senão se' escreve-se junto em quatro letras: elif.",
+                explanation: "Usamos elif para adicionar condições intermediárias após um if inicial."
+            },
+            {
+                id: 21, category: "structures", character: "Antéria", topic: "str.upper()", scene: "sat",
+                title: "Padronizando Códigos de Satélite com Antéria",
+                story: "Antéria recebeu o sinal 'sat_alfa' em letras minúsculas e precisa convertê-lo todo para MAIÚSCULAS.",
+                code: "sinal = \"sat_alfa\"\ncodigo = sinal.___()\nprint(codigo)",
+                options: ["upper", "capitalize", "to_upper", "caps"],
+                correct: 0,
+                hint: "Em inglês, letras maiúsculas são chamadas de 'upper case'.",
+                explanation: "O método .upper() retorna uma nova string com todos os caracteres em maiúsculas."
+            },
+            {
+                id: 22, category: "structures", character: "Girúndia", topic: "sum()", scene: "factory",
+                title: "Somando Lotes de Produção",
+                story: "Girúndia quer somar todos os números da lista lotes = [12, 18, 25].",
+                code: "lotes = [12, 18, 25]\ntotal = ___(lotes)\nprint(total)",
+                options: ["sum", "total", "add_all", "count"],
+                correct: 0,
+                hint: "É a função nativa de 3 letras do Python para somar os itens de uma lista.",
+                explanation: "A função embutida sum(lotes) calcula a soma de todos os elementos da lista."
+            },
+            {
+                id: 23, category: "structures", character: "Arcídia", topic: "return", scene: "func",
+                title: "Devolvendo o Resultado da Função da Arcídia",
+                story: "Arcídia escreveu uma função para calcular o dobro de uma chave, mas esqueceu a palavra que devolve o valor.",
+                code: "def dobrar(valor):\n    ___ valor * 2",
+                options: ["return", "yields", "output", "send"],
+                correct: 0,
+                hint: "Qual palavra reservada encerra a função e retorna um resultado para quem a chamou?",
+                explanation: "Usamos return para devolver o resultado calculado dentro de uma função em Python."
+            },
+            {
+                id: 24, category: "pandas", character: "Esmeraldina", topic: "df_.columns", scene: "gems",
+                title: "Listando Nomes das Colunas de df_gemas",
+                story: "Esmeraldina abriu a tabela df_gemas e quer inspecionar os nomes de todas as colunas disponíveis.",
+                data: [
+                    { pedra: "Esmeralda", quilates: "4.2", origem: "BA" },
+                    { pedra: "Safira", quilates: "3.1", origem: "MG" },
+                    { pedra: "Rubi", quilates: "2.8", origem: "GO" }
+                ],
+                code: "nomes_colunas = df_gemas.___\nprint(nomes_colunas)",
+                options: ["columns", "headers", "cols()", "fields"],
+                correct: 0,
+                hint: "É um atributo (sem parênteses) do DataFrame que guarda o índice de colunas.",
+                explanation: "O atributo df_gemas.columns retorna os rótulos das colunas do DataFrame."
+            },
+            {
+                id: 25, category: "logic", character: "Porfília", topic: "in", scene: "vault",
+                title: "Rastreando Suspeito na Lista da Porfília",
+                story: "Porfília quer verificar se o código 'X99' está presente dentro da lista de registros suspeitos.",
+                code: "suspeitos = [\"A12\", \"X99\", \"B04\"]\nif \"X99\" ___ suspeitos:\n    print(\"Alerta encontrado!\")",
+                options: ["in", "has", "inside", "contains"],
+                correct: 0,
+                hint: "Qual operador de 2 letras verifica pertinência ('está em') dentro de uma lista Python?",
+                explanation: "O operador in verifica se um elemento pertence a uma lista, tupla, string ou dicionário."
+            }
+        ];
+
+        /* =====================================================================
+           2. ILUSTRAÇÕES SVG TEMÁTICAS POR CASO
+           ===================================================================== */
+        function buildCaseIllustration(scene, caseId) {
+            const c = Number(caseId) || 1;
+            const scenes = {
+                pulse: {
+                    tag: "MONITOR CARDÍACO",
+                    caption: "Leitura de pulso e resposta imediata no painel clínico.",
+                    svg: `<svg viewBox="0 0 160 96" class="w-full h-full"><rect x="8" y="10" width="144" height="76" rx="10" fill="#091326" stroke="#38bdf8" stroke-width="2"/><polyline points="16,54 44,54 56,28 70,70 84,42 96,54 144,54" fill="none" stroke="#34d399" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="132" cy="26" r="6" fill="#f43f5e"/></svg>`
+                },
+                rain: {
+                    tag: "CLIMA & METEOROLOGIA",
+                    caption: "Nuvens carregadas e decisão condicional antes de sair.",
+                    svg: `<svg viewBox="0 0 160 96" class="w-full h-full"><path d="M46 52a20 20 0 0 1 39-6 15 15 0 0 1 11 26H48a14 14 0 0 1-2-20z" fill="#334155" stroke="#94a3b8" stroke-width="2"/><line x1="56" y1="76" x2="50" y2="88" stroke="#38bdf8" stroke-width="3" stroke-linecap="round"/><line x1="80" y1="76" x2="74" y2="88" stroke="#38bdf8" stroke-width="3" stroke-linecap="round"/><line x1="104" y1="76" x2="98" y2="88" stroke="#38bdf8" stroke-width="3" stroke-linecap="round"/></svg>`
+                },
+                json: {
+                    tag: "ESTRUTURA JSON",
+                    caption: "Chaves e valores estruturados para leitura em DataFrame.",
+                    svg: `<svg viewBox="0 0 160 96" class="w-full h-full"><rect x="18" y="14" width="124" height="68" rx="10" fill="#111827" stroke="#818cf8" stroke-width="2"/><text x="32" y="42" fill="#a5b4fc" font-family="JetBrains Mono, monospace" font-size="18" font-weight="700">{ "id": ${c} }</text><text x="32" y="66" fill="#34d399" font-family="JetBrains Mono, monospace" font-size="13">"status": "ok"</text></svg>`
+                },
+                table: {
+                    tag: "TABELA DATAFRAME",
+                    caption: "Linhas e colunas organizadas para análise com pandas.",
+                    svg: `<svg viewBox="0 0 160 96" class="w-full h-full"><rect x="18" y="14" width="124" height="68" rx="8" fill="#0f172a" stroke="#38bdf8" stroke-width="2"/><line x1="18" y1="36" x2="142" y2="36" stroke="#38bdf8" stroke-width="2"/><line x1="18" y1="58" x2="142" y2="58" stroke="#1e293b" stroke-width="2"/><line x1="60" y1="14" x2="60" y2="82" stroke="#334155" stroke-width="2"/><line x1="102" y1="14" x2="102" y2="82" stroke="#334155" stroke-width="2"/></svg>`
+                },
+                lab: {
+                    tag: "BANCADA DE AMOSTRAS",
+                    caption: "Tubos de ensaio, coleções e registros de laboratório.",
+                    svg: `<svg viewBox="0 0 160 96" class="w-full h-full"><rect x="38" y="18" width="18" height="58" rx="9" fill="#0f172a" stroke="#34d399" stroke-width="2"/><rect x="40" y="46" width="14" height="28" rx="6" fill="#10b981" opacity="0.55"/><rect x="71" y="18" width="18" height="58" rx="9" fill="#0f172a" stroke="#38bdf8" stroke-width="2"/><rect x="73" y="38" width="14" height="36" rx="6" fill="#0ea5e9" opacity="0.55"/><rect x="104" y="18" width="18" height="58" rx="9" fill="#0f172a" stroke="#fbbf24" stroke-width="2"/><rect x="106" y="52" width="14" height="22" rx="6" fill="#f59e0b" opacity="0.55"/></svg>`
+                },
+                rocket: {
+                    tag: "CONTROLE DE LANÇAMENTO",
+                    caption: "Telemetria e comandos de saída no painel da missão.",
+                    svg: `<svg viewBox="0 0 160 96" class="w-full h-full"><polygon points="80,14 98,48 88,68 72,68 62,48" fill="#e2e8f0" stroke="#818cf8" stroke-width="2"/><circle cx="80" cy="44" r="7" fill="#38bdf8"/><polygon points="62,56 48,72 66,68" fill="#f97316"/><polygon points="98,56 112,72 94,68" fill="#f97316"/><polygon points="73,70 80,88 87,70" fill="#facc15"/></svg>`
+                },
+                vault: {
+                    tag: "TRAVA DE SEGURANÇA",
+                    caption: "Verificação de condições lógicas e integridade de execução.",
+                    svg: `<svg viewBox="0 0 160 96" class="w-full h-full"><rect x="52" y="42" width="56" height="40" rx="8" fill="#1e293b" stroke="#fbbf24" stroke-width="2.5"/><path d="M62 42V30a18 18 0 0 1 36 0v12" fill="none" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"/><circle cx="80" cy="62" r="5" fill="#fbbf24"/></svg>`
+                },
+                sub: {
+                    tag: "SONAR SUBMARINO",
+                    caption: "Navegação em profundidade e leitura de faixas de pressão.",
+                    svg: `<svg viewBox="0 0 160 96" class="w-full h-full"><rect x="34" y="40" width="84" height="26" rx="13" fill="#0f172a" stroke="#22d3ee" stroke-width="2.5"/><line x1="76" y1="40" x2="76" y2="20" stroke="#22d3ee" stroke-width="2.5"/><line x1="76" y1="20" x2="90" y2="20" stroke="#22d3ee" stroke-width="2.5"/><circle cx="128" cy="53" r="10" fill="none" stroke="#22d3ee" stroke-width="1.5" opacity="0.6"/><circle cx="128" cy="53" r="18" fill="none" stroke="#22d3ee" stroke-width="1.5" opacity="0.35"/></svg>`
+                },
+                func: {
+                    tag: "BLOCO DE FUNÇÃO",
+                    caption: "Encapsulamento de regras e retorno de valores em Python.",
+                    svg: `<svg viewBox="0 0 160 96" class="w-full h-full"><rect x="24" y="18" width="112" height="60" rx="10" fill="#0f172a" stroke="#c084fc" stroke-width="2"/><text x="36" y="45" fill="#e9d5ff" font-family="JetBrains Mono, monospace" font-size="14" font-weight="700">def fn(x):</text><text x="36" y="66" fill="#34d399" font-family="JetBrains Mono, monospace" font-size="13">  return res</text></svg>`
+                },
+                sat: {
+                    tag: "TELEMETRIA ORBITAL",
+                    caption: "Padronização de sinais e códigos vindos da órbita.",
+                    svg: `<svg viewBox="0 0 160 96" class="w-full h-full"><rect x="64" y="34" width="32" height="24" rx="5" fill="#1e293b" stroke="#38bdf8" stroke-width="2"/><rect x="22" y="28" width="32" height="16" rx="3" fill="#1d4ed8" stroke="#93c5fd" stroke-width="1.5"/><rect x="106" y="48" width="32" height="16" rx="3" fill="#1d4ed8" stroke="#93c5fd" stroke-width="1.5"/><path d="M116 74q16-14 28 0" fill="none" stroke="#34d399" stroke-width="2" stroke-linecap="round"/></svg>`
+                },
+                factory: {
+                    tag: "LINHA DE LOTES",
+                    caption: "Contagem e soma de lotes produzidos na operação.",
+                    svg: `<svg viewBox="0 0 160 96" class="w-full h-full"><rect x="26" y="46" width="24" height="24" rx="4" fill="#312e81" stroke="#818cf8" stroke-width="2"/><rect x="68" y="46" width="24" height="24" rx="4" fill="#312e81" stroke="#818cf8" stroke-width="2"/><rect x="110" y="46" width="24" height="24" rx="4" fill="#312e81" stroke="#818cf8" stroke-width="2"/><line x1="16" y1="74" x2="144" y2="74" stroke="#64748b" stroke-width="3" stroke-linecap="round"/></svg>`
+                },
+                gems: {
+                    tag: "CATÁLOGO DE GEMAS",
+                    caption: "Inspeção de atributos e colunas de inventário.",
+                    svg: `<svg viewBox="0 0 160 96" class="w-full h-full"><polygon points="80,18 114,42 80,80 46,42" fill="#064e3b" stroke="#34d399" stroke-width="2.5"/><polyline points="46,42 80,52 114,42" fill="none" stroke="#6ee7b7" stroke-width="1.8"/><line x1="80" y1="18" x2="80" y2="80" stroke="#6ee7b7" stroke-width="1.5"/></svg>`
+                }
+            };
+            return scenes[scene] || scenes.func;
+        }
+
+        /* =====================================================================
+           3. CRIADOR E RENDERIZADOR DE AVATAR PERSONALIZADO (LOCALSTORAGE)
+           ===================================================================== */
+        const AVATAR_STORAGE_KEY = "pyquest_user_avatar_v1";
+        const AVATAR_THEMES = {
+            indigo: { bg: "#1e1b4b", stroke: "#818cf8", accent: "#38bdf8", eye: "#e0e7ff" },
+            emerald: { bg: "#064e3b", stroke: "#34d399", accent: "#a7f3d0", eye: "#ecfdf5" },
+            amber: { bg: "#451a03", stroke: "#fbbf24", accent: "#fde68a", eye: "#fffbeb" },
+            rose: { bg: "#4c0519", stroke: "#fb7185", accent: "#f472b6", eye: "#ffe4e6" }
+        };
+
+        let userAvatar = {
+            style: "bot",
+            theme: "indigo",
+            gear: "antenna"
+        };
+
+        function buildAvatarSvg(cfg = userAvatar) {
+            const t = AVATAR_THEMES[cfg.theme] || AVATAR_THEMES.indigo;
+            let gearSvg = "";
+            if (cfg.gear === "antenna") {
+                gearSvg = `<line x1="48" y1="22" x2="48" y2="10" stroke="${t.accent}" stroke-width="3" stroke-linecap="round"/><circle cx="48" cy="9" r="4" fill="${t.accent}"/>`;
+            } else if (cfg.gear === "crown") {
+                gearSvg = `<polygon points="28,22 35,11 48,18 61,11 68,22" fill="#fbbf24" stroke="#f59e0b" stroke-width="1.5"/>`;
+            } else if (cfg.gear === "spark") {
+                gearSvg = `<polygon points="76,12 79,19 86,22 79,25 76,32 73,25 66,22 73,19" fill="${t.accent}"/>`;
+            }
+
+            let faceSvg = "";
+            if (cfg.style === "visor") {
+                faceSvg = `
                     <rect x="24" y="24" width="48" height="48" rx="14" fill="${t.bg}" stroke="${t.stroke}" stroke-width="3"/>
                     <rect x="29" y="38" width="38" height="14" rx="7" fill="${t.accent}" opacity="0.28" stroke="${t.accent}" stroke-width="2"/>
                     <circle cx="40" cy="45" r="3.5" fill="${t.eye}"/>
                     <circle cx="56" cy="45" r="3.5" fill="${t.eye}"/>
                     <line x1="38" y1="61" x2="58" y2="61" stroke="${t.stroke}" stroke-width="2.5" stroke-linecap="round"/>
                 `;
-        } else if (cfg.style === "cat") {
-          faceSvg = `
+            } else if (cfg.style === "cat") {
+                faceSvg = `
                     <polygon points="26,34 30,18 42,27" fill="${t.bg}" stroke="${t.stroke}" stroke-width="2.5"/>
                     <polygon points="70,34 66,18 54,27" fill="${t.bg}" stroke="${t.stroke}" stroke-width="2.5"/>
                     <rect x="24" y="26" width="48" height="46" rx="18" fill="${t.bg}" stroke="${t.stroke}" stroke-width="3"/>
@@ -1386,8 +1007,8 @@
                     <polygon points="48,51 44,55 52,55" fill="${t.accent}"/>
                     <path d="M40 60q8 6 16 0" fill="none" stroke="${t.accent}" stroke-width="2.2" stroke-linecap="round"/>
                 `;
-        } else if (cfg.style === "fox") {
-          faceSvg = `
+            } else if (cfg.style === "fox") {
+                faceSvg = `
                     <polygon points="24,36 28,16 44,27" fill="${t.bg}" stroke="${t.stroke}" stroke-width="2.5"/>
                     <polygon points="72,36 68,16 52,27" fill="${t.bg}" stroke="${t.stroke}" stroke-width="2.5"/>
                     <polygon points="48,26 74,44 48,74 22,44" fill="${t.bg}" stroke="${t.stroke}" stroke-width="3"/>
@@ -1395,806 +1016,768 @@
                     <circle cx="57" cy="46" r="3.5" fill="${t.eye}"/>
                     <circle cx="48" cy="56" r="3.5" fill="${t.accent}"/>
                 `;
-        } else {
-          faceSvg = `
+            } else {
+                faceSvg = `
                     <rect x="24" y="24" width="48" height="48" rx="14" fill="${t.bg}" stroke="${t.stroke}" stroke-width="3"/>
                     <circle cx="39" cy="45" r="4.5" fill="${t.accent}"/>
                     <circle cx="57" cy="45" r="4.5" fill="${t.accent}"/>
                     <rect x="37" y="57" width="22" height="6" rx="3" fill="${t.eye}"/>
                 `;
+            }
+
+            return `<svg viewBox="0 0 96 96" class="w-full h-full">${gearSvg}${faceSvg}</svg>`;
         }
 
-        return `<svg viewBox="0 0 96 96" class="w-full h-full">${gearSvg}${faceSvg}</svg>`;
-      }
+        function renderAllAvatars() {
+            const svg = buildAvatarSvg(userAvatar);
+            const nameVal = (document.getElementById("player-name")?.value || "Jogador Py").trim() || "Jogador Py";
+            const badge = document.getElementById("header-avatar-badge");
+            const preview = document.getElementById("home-avatar-preview");
+            const previewName = document.getElementById("home-avatar-name");
+            const hudAv = document.getElementById("hud-avatar");
+            const resAv = document.getElementById("result-avatar");
 
-      function renderAllAvatars() {
-        const svg = buildAvatarSvg(userAvatar);
-        const nameVal =
-          (
-            document.getElementById("player-name")?.value || "Jogador Py"
-          ).trim() || "Jogador Py";
-        const badge = document.getElementById("header-avatar-badge");
-        const preview = document.getElementById("home-avatar-preview");
-        const previewName = document.getElementById("home-avatar-name");
-        const hudAv = document.getElementById("hud-avatar");
-        const resAv = document.getElementById("result-avatar");
+            if (badge) badge.innerHTML = svg;
+            if (preview) preview.innerHTML = svg;
+            if (previewName) previewName.textContent = nameVal;
+            if (hudAv) hudAv.innerHTML = svg;
+            if (resAv) resAv.innerHTML = svg;
+        }
 
-        if (badge) badge.innerHTML = svg;
-        if (preview) preview.innerHTML = svg;
-        if (previewName) previewName.textContent = nameVal;
-        if (hudAv) hudAv.innerHTML = svg;
-        if (resAv) resAv.innerHTML = svg;
-      }
+        function saveUserAvatar() {
+            try {
+                localStorage.setItem(AVATAR_STORAGE_KEY, JSON.stringify(userAvatar));
+            } catch (_) {}
+        }
 
-      function saveUserAvatar() {
-        try {
-          localStorage.setItem(AVATAR_STORAGE_KEY, JSON.stringify(userAvatar));
-        } catch (_) {}
-      }
+        function loadUserAvatar() {
+            try {
+                const raw = localStorage.getItem(AVATAR_STORAGE_KEY);
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    userAvatar = {
+                        style: ["bot", "visor", "cat", "fox"].includes(parsed.style) ? parsed.style : "bot",
+                        theme: AVATAR_THEMES[parsed.theme] ? parsed.theme : "indigo",
+                        gear: ["antenna", "crown", "spark", "none"].includes(parsed.gear) ? parsed.gear : "antenna"
+                    };
+                }
+            } catch (_) {}
+            const styleEl = document.getElementById("avatar-style");
+            const themeEl = document.getElementById("avatar-theme");
+            const gearEl = document.getElementById("avatar-gear");
+            if (styleEl) styleEl.value = userAvatar.style;
+            if (themeEl) themeEl.value = userAvatar.theme;
+            if (gearEl) gearEl.value = userAvatar.gear;
+            renderAllAvatars();
+        }
 
-      function loadUserAvatar() {
-        try {
-          const raw = localStorage.getItem(AVATAR_STORAGE_KEY);
-          if (raw) {
-            const parsed = JSON.parse(raw);
+        function updateAvatarFromControls() {
             userAvatar = {
-              style: ["bot", "visor", "cat", "fox"].includes(parsed.style)
-                ? parsed.style
-                : "bot",
-              theme: AVATAR_THEMES[parsed.theme] ? parsed.theme : "indigo",
-              gear: ["antenna", "crown", "spark", "none"].includes(parsed.gear)
-                ? parsed.gear
-                : "antenna",
+                style: document.getElementById("avatar-style")?.value || "bot",
+                theme: document.getElementById("avatar-theme")?.value || "indigo",
+                gear: document.getElementById("avatar-gear")?.value || "antenna"
             };
-          }
-        } catch (_) {}
-        const styleEl = document.getElementById("avatar-style");
-        const themeEl = document.getElementById("avatar-theme");
-        const gearEl = document.getElementById("avatar-gear");
-        if (styleEl) styleEl.value = userAvatar.style;
-        if (themeEl) themeEl.value = userAvatar.theme;
-        if (gearEl) gearEl.value = userAvatar.gear;
-        renderAllAvatars();
-      }
+            saveUserAvatar();
+            renderAllAvatars();
+            SoundFX.click();
+        }
 
-      function updateAvatarFromControls() {
-        userAvatar = {
-          style: document.getElementById("avatar-style")?.value || "bot",
-          theme: document.getElementById("avatar-theme")?.value || "indigo",
-          gear: document.getElementById("avatar-gear")?.value || "antenna",
-        };
-        saveUserAvatar();
-        renderAllAvatars();
-        SoundFX.click();
-      }
+        function randomizeAvatar() {
+            const styles = ["bot", "visor", "cat", "fox"];
+            const themes = Object.keys(AVATAR_THEMES);
+            const gears = ["antenna", "crown", "spark", "none"];
+            userAvatar = {
+                style: styles[Math.floor(Math.random() * styles.length)],
+                theme: themes[Math.floor(Math.random() * themes.length)],
+                gear: gears[Math.floor(Math.random() * gears.length)]
+            };
+            const styleEl = document.getElementById("avatar-style");
+            const themeEl = document.getElementById("avatar-theme");
+            const gearEl = document.getElementById("avatar-gear");
+            if (styleEl) styleEl.value = userAvatar.style;
+            if (themeEl) themeEl.value = userAvatar.theme;
+            if (gearEl) gearEl.value = userAvatar.gear;
+            saveUserAvatar();
+            renderAllAvatars();
+            SoundFX.hint();
+        }
 
-      function randomizeAvatar() {
-        const styles = ["bot", "visor", "cat", "fox"];
-        const themes = Object.keys(AVATAR_THEMES);
-        const gears = ["antenna", "crown", "spark", "none"];
-        userAvatar = {
-          style: styles[Math.floor(Math.random() * styles.length)],
-          theme: themes[Math.floor(Math.random() * themes.length)],
-          gear: gears[Math.floor(Math.random() * gears.length)],
-        };
-        const styleEl = document.getElementById("avatar-style");
-        const themeEl = document.getElementById("avatar-theme");
-        const gearEl = document.getElementById("avatar-gear");
-        if (styleEl) styleEl.value = userAvatar.style;
-        if (themeEl) themeEl.value = userAvatar.theme;
-        if (gearEl) gearEl.value = userAvatar.gear;
-        saveUserAvatar();
-        renderAllAvatars();
-        SoundFX.hint();
-      }
+        function syncAvatarName() {
+            renderAllAvatars();
+        }
 
-      function syncAvatarName() {
-        renderAllAvatars();
-      }
-
-      /* =====================================================================
+        /* =====================================================================
            4. MOTOR DE ÁUDIO: TRILHA ÚNICA POR CASO + EFEITOS SONOROS WEB AUDIO
            ===================================================================== */
-      const SoundFX = (() => {
-        let ctx = null;
-        let enabled = true;
-        let bgTimer = null;
-        let stepIndex = 0;
-        let activeTrackProfile = null;
-        const audioEl = new Audio();
-        audioEl.loop = true;
-        audioEl.volume = 0.25;
+        const SoundFX = (() => {
+            let ctx = null;
+            let enabled = true;
+            let bgTimer = null;
+            let stepIndex = 0;
+            let activeTrackProfile = null;
+            const audioEl = new Audio();
+            audioEl.loop = true;
+            audioEl.volume = 0.25;
 
-        function ensureCtx() {
-          if (!enabled) return null;
-          if (!ctx) {
-            const AudioCtx = window.AudioContext || window.webkitAudioContext;
-            if (AudioCtx) {
-              ctx = new AudioCtx();
+            function ensureCtx() {
+                if (!enabled) return null;
+                if (!ctx) {
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    if (AudioCtx) {
+                        ctx = new AudioCtx();
+                    }
+                }
+                if (ctx && ctx.state === "suspended") {
+                    ctx.resume().catch(() => {});
+                }
+                return ctx;
             }
-          }
-          if (ctx && ctx.state === "suspended") {
-            ctx.resume().catch(() => {});
-          }
-          return ctx;
-        }
 
-        function buildTrackProfileForCase(caseObj, index) {
-          const trackName = CHAT_AUDIO_TRACKS[index % CHAT_AUDIO_TRACKS.length];
-          const seed = ((caseObj?.id || index + 1) * 7919 + index * 131) % 997;
-          const scales = [
-            [261.63, 293.66, 329.63, 392.0, 440.0, 523.25],
-            [293.66, 349.23, 392.0, 440.0, 523.25, 587.33],
-            [329.63, 392.0, 440.0, 493.88, 587.33, 659.25],
-            [220.0, 261.63, 293.66, 329.63, 392.0, 440.0],
-            [349.23, 392.0, 440.0, 523.25, 587.33, 698.46],
-          ];
-          const waveTypes = ["triangle", "square", "sine", "sawtooth"];
-          const scale = scales[seed % scales.length];
-          const pattern = Array.from(
-            { length: 8 },
-            (_, i) => scale[(seed + i * 3) % scale.length],
-          );
-          const tempoMs = 190 + (seed % 7) * 28;
-          return {
-            caseId: caseObj?.id || index + 1,
-            trackName,
-            pattern,
-            tempoMs,
-            wave: waveTypes[seed % waveTypes.length],
-          };
-        }
-
-        function playBgStep() {
-          if (!enabled || !activeTrackProfile) return;
-          const c = ensureCtx();
-          if (!c) return;
-          try {
-            const freq =
-              activeTrackProfile.pattern[
-                stepIndex % activeTrackProfile.pattern.length
-              ];
-            stepIndex += 1;
-            const now = c.currentTime;
-            const osc = c.createOscillator();
-            const gain = c.createGain();
-            osc.type = activeTrackProfile.wave;
-            osc.frequency.setValueAtTime(freq, now);
-            gain.gain.setValueAtTime(0.0001, now);
-            gain.gain.exponentialRampToValueAtTime(0.022, now + 0.02);
-            gain.gain.exponentialRampToValueAtTime(
-              0.0001,
-              now + (activeTrackProfile.tempoMs / 1000) * 0.85,
-            );
-            osc.connect(gain);
-            gain.connect(c.destination);
-            osc.start(now);
-            osc.stop(now + (activeTrackProfile.tempoMs / 1000) * 0.9);
-          } catch (_) {}
-        }
-
-        function startBgLoop() {
-          if (bgTimer) {
-            clearInterval(bgTimer);
-            bgTimer = null;
-          }
-          if (!enabled || !activeTrackProfile) return;
-          bgTimer = setInterval(playBgStep, activeTrackProfile.tempoMs);
-        }
-
-        function playCaseMusic(caseObj, index) {
-          activeTrackProfile = buildTrackProfileForCase(caseObj, index);
-          stepIndex = 0;
-          const label = `Caso #${activeTrackProfile.caseId}: ${activeTrackProfile.trackName}`;
-          const hudTrack = document.getElementById("hud-track");
-          const pill = document.getElementById("now-playing-pill");
-          if (hudTrack) hudTrack.textContent = label;
-          if (pill) pill.textContent = `♪ ${label}`;
-
-          if (!enabled) {
-            audioEl.pause();
-            return;
-          }
-
-          startBgLoop();
-
-          try {
-            audioEl.src = encodeURI(activeTrackProfile.trackName);
-            const p = audioEl.play();
-            if (p && typeof p.catch === "function") {
-              p.catch(() => {});
+            function buildTrackProfileForCase(caseObj, index) {
+                const trackName = CHAT_AUDIO_TRACKS[index % CHAT_AUDIO_TRACKS.length];
+                const seed = ((caseObj?.id || (index + 1)) * 7919 + index * 131) % 997;
+                const scales = [
+                    [261.63, 293.66, 329.63, 392.00, 440.00, 523.25],
+                    [293.66, 349.23, 392.00, 440.00, 523.25, 587.33],
+                    [329.63, 392.00, 440.00, 493.88, 587.33, 659.25],
+                    [220.00, 261.63, 293.66, 329.63, 392.00, 440.00],
+                    [349.23, 392.00, 440.00, 523.25, 587.33, 698.46]
+                ];
+                const waveTypes = ["triangle", "square", "sine", "sawtooth"];
+                const scale = scales[seed % scales.length];
+                const pattern = Array.from({ length: 8 }, (_, i) => scale[(seed + i * 3) % scale.length]);
+                const tempoMs = 190 + (seed % 7) * 28;
+                return {
+                    caseId: caseObj?.id || (index + 1),
+                    trackName,
+                    pattern,
+                    tempoMs,
+                    wave: waveTypes[seed % waveTypes.length]
+                };
             }
-          } catch (_) {}
-        }
 
-        function stopMusic() {
-          if (bgTimer) {
-            clearInterval(bgTimer);
-            bgTimer = null;
-          }
-          try {
-            audioEl.pause();
-          } catch (_) {}
-        }
+            function playBgStep() {
+                if (!enabled || !activeTrackProfile) return;
+                const c = ensureCtx();
+                if (!c) return;
+                try {
+                    const freq = activeTrackProfile.pattern[stepIndex % activeTrackProfile.pattern.length];
+                    stepIndex += 1;
+                    const now = c.currentTime;
+                    const osc = c.createOscillator();
+                    const gain = c.createGain();
+                    osc.type = activeTrackProfile.wave;
+                    osc.frequency.setValueAtTime(freq, now);
+                    gain.gain.setValueAtTime(0.0001, now);
+                    gain.gain.exponentialRampToValueAtTime(0.022, now + 0.02);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, now + (activeTrackProfile.tempoMs / 1000) * 0.85);
+                    osc.connect(gain);
+                    gain.connect(c.destination);
+                    osc.start(now);
+                    osc.stop(now + (activeTrackProfile.tempoMs / 1000) * 0.9);
+                } catch (_) {}
+            }
 
-        function setEnabled(val) {
-          enabled = Boolean(val);
-          if (!enabled) {
-            stopMusic();
-          } else if (activeTrackProfile) {
-            ensureCtx();
-            startBgLoop();
-            try {
-              const p = audioEl.play();
-              if (p && typeof p.catch === "function") p.catch(() => {});
-            } catch (_) {}
-          }
-        }
+            function startBgLoop() {
+                if (bgTimer) {
+                    clearInterval(bgTimer);
+                    bgTimer = null;
+                }
+                if (!enabled || !activeTrackProfile) return;
+                bgTimer = setInterval(playBgStep, activeTrackProfile.tempoMs);
+            }
 
-        function isEnabled() {
-          return enabled;
-        }
+            function playCaseMusic(caseObj, index) {
+                activeTrackProfile = buildTrackProfileForCase(caseObj, index);
+                stepIndex = 0;
+                const label = `Caso #${activeTrackProfile.caseId}: ${activeTrackProfile.trackName}`;
+                const hudTrack = document.getElementById("hud-track");
+                const pill = document.getElementById("now-playing-pill");
+                if (hudTrack) hudTrack.textContent = label;
+                if (pill) pill.textContent = `♪ ${label}`;
 
-        function tone(freq, duration, type = "sine", vol = 0.08, delay = 0) {
-          if (!enabled) return;
-          const c = ensureCtx();
-          if (!c) return;
-          try {
-            const now = c.currentTime + delay;
-            const osc = c.createOscillator();
-            const gain = c.createGain();
-            osc.type = type;
-            osc.frequency.setValueAtTime(freq, now);
-            gain.gain.setValueAtTime(0.0001, now);
-            gain.gain.exponentialRampToValueAtTime(vol, now + 0.015);
-            gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-            osc.connect(gain);
-            gain.connect(c.destination);
-            osc.start(now);
-            osc.stop(now + duration + 0.02);
-          } catch (_) {}
-        }
+                if (!enabled) {
+                    audioEl.pause();
+                    return;
+                }
 
-        return {
-          ensureCtx,
-          playCaseMusic,
-          stopMusic,
-          setEnabled,
-          isEnabled,
-          click: () => tone(520, 0.07, "triangle", 0.06, 0),
-          hint: () => {
-            tone(660, 0.08, "sine", 0.06, 0);
-            tone(880, 0.12, "sine", 0.06, 0.08);
-          },
-          correct: () => {
-            tone(523.25, 0.1, "triangle", 0.09, 0);
-            tone(659.25, 0.1, "triangle", 0.09, 0.08);
-            tone(783.99, 0.18, "triangle", 0.1, 0.16);
-          },
-          wrong: () => {
-            tone(240, 0.14, "sawtooth", 0.07, 0);
-            tone(175, 0.22, "sawtooth", 0.07, 0.11);
-          },
-          finish: () => {
-            tone(523.25, 0.12, "triangle", 0.08, 0);
-            tone(659.25, 0.12, "triangle", 0.08, 0.11);
-            tone(783.99, 0.12, "triangle", 0.08, 0.22);
-            tone(1046.5, 0.26, "triangle", 0.09, 0.33);
-          },
-        };
-      })();
+                startBgLoop();
 
-      /* =====================================================================
-           5. ESTADO DO JOGO, ATALHOS DE TECLADO E PLACAR LOCAL
+                try {
+                    audioEl.src = encodeURI(activeTrackProfile.trackName);
+                    const p = audioEl.play();
+                    if (p && typeof p.catch === "function") {
+                        p.catch(() => {});
+                    }
+                } catch (_) {}
+            }
+
+            function stopMusic() {
+                if (bgTimer) {
+                    clearInterval(bgTimer);
+                    bgTimer = null;
+                }
+                try {
+                    audioEl.pause();
+                } catch (_) {}
+            }
+
+            function setEnabled(val) {
+                enabled = Boolean(val);
+                if (!enabled) {
+                    stopMusic();
+                } else if (activeTrackProfile) {
+                    ensureCtx();
+                    startBgLoop();
+                    try {
+                        const p = audioEl.play();
+                        if (p && typeof p.catch === "function") p.catch(() => {});
+                    } catch (_) {}
+                }
+            }
+
+            function isEnabled() {
+                return enabled;
+            }
+
+            function tone(freq, duration, type = "sine", vol = 0.08, delay = 0) {
+                if (!enabled) return;
+                const c = ensureCtx();
+                if (!c) return;
+                try {
+                    const now = c.currentTime + delay;
+                    const osc = c.createOscillator();
+                    const gain = c.createGain();
+                    osc.type = type;
+                    osc.frequency.setValueAtTime(freq, now);
+                    gain.gain.setValueAtTime(0.0001, now);
+                    gain.gain.exponentialRampToValueAtTime(vol, now + 0.015);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+                    osc.connect(gain);
+                    gain.connect(c.destination);
+                    osc.start(now);
+                    osc.stop(now + duration + 0.02);
+                } catch (_) {}
+            }
+
+            return {
+                ensureCtx,
+                playCaseMusic,
+                stopMusic,
+                setEnabled,
+                isEnabled,
+                click: () => tone(520, 0.07, "triangle", 0.06, 0),
+                hint: () => {
+                    tone(660, 0.08, "sine", 0.06, 0);
+                    tone(880, 0.12, "sine", 0.06, 0.08);
+                },
+                correct: () => {
+                    tone(523.25, 0.1, "triangle", 0.09, 0);
+                    tone(659.25, 0.1, "triangle", 0.09, 0.08);
+                    tone(783.99, 0.18, "triangle", 0.1, 0.16);
+                },
+                wrong: () => {
+                    tone(240, 0.14, "sawtooth", 0.07, 0);
+                    tone(175, 0.22, "sawtooth", 0.07, 0.11);
+                },
+                finish: () => {
+                    tone(523.25, 0.12, "triangle", 0.08, 0);
+                    tone(659.25, 0.12, "triangle", 0.08, 0.11);
+                    tone(783.99, 0.12, "triangle", 0.08, 0.22);
+                    tone(1046.5, 0.26, "triangle", 0.09, 0.33);
+                }
+            };
+        })();
+
+        /* =====================================================================
+           5. ESTADO DO JOGO, ATALHOS DE TECLADO E PLACAR LOCAL + SUPABASE
            ===================================================================== */
-      const LEADERBOARD_KEY = "pyquest_leaderboard_v1";
-      const OPTION_LABELS = ["1", "2", "3", "4"];
-      const OPTION_STYLES = [
-        "bg-rose-600/90 hover:bg-rose-500 border-rose-400/40 text-white",
-        "bg-sky-600/90 hover:bg-sky-500 border-sky-400/40 text-white",
-        "bg-amber-500/90 hover:bg-amber-400 border-amber-300/40 text-slate-950",
-        "bg-emerald-600/90 hover:bg-emerald-500 border-emerald-400/40 text-white",
-      ];
+        const LEADERBOARD_KEY = "pyquest_leaderboard_v1";
+        const OPTION_LABELS = ["1", "2", "3", "4"];
+        const OPTION_STYLES = [
+            "bg-rose-600/90 hover:bg-rose-500 border-rose-400/40 text-white",
+            "bg-sky-600/90 hover:bg-sky-500 border-sky-400/40 text-white",
+            "bg-amber-500/90 hover:bg-amber-400 border-amber-300/40 text-slate-950",
+            "bg-emerald-600/90 hover:bg-emerald-500 border-emerald-400/40 text-white"
+        ];
 
-      let currentMode = "solo";
-      let currentRoomPin = "";
-      let timerInterval = null;
-      let gameState = {
-        questions: [],
-        currentIndex: 0,
-        score: 0,
-        correctCount: 0,
-        streak: 0,
-        maxStreak: 0,
-        timeLeft: 25,
-        hintUsed: false,
-        answered: false,
-        currentCorrectIdx: 0,
-      };
-
-      function showToast(msg) {
-        const box = document.getElementById("toast-box");
-        const txt = document.getElementById("toast-text");
-        if (!box || !txt) return;
-        txt.textContent = msg;
-        box.classList.remove("hidden");
-      }
-
-      function hideToast() {
-        const box = document.getElementById("toast-box");
-        if (box) box.classList.add("hidden");
-      }
-
-      function showScreen(screenId) {
-        ["screen-home", "screen-join", "screen-game", "screen-result"].forEach(
-          (id) => {
-            const el = document.getElementById(id);
-            if (el) {
-              el.classList.toggle("hidden", id !== screenId);
-            }
-          },
-        );
-        const homeBtn = document.getElementById("btn-home");
-        if (homeBtn) {
-          homeBtn.classList.toggle("hidden", screenId === "screen-home");
-        }
-        if (screenId !== "screen-game" && timerInterval) {
-          clearInterval(timerInterval);
-          timerInterval = null;
-        }
-      }
-
-      function returnHome() {
-        SoundFX.click();
-        SoundFX.stopMusic();
-        const pill = document.getElementById("now-playing-pill");
-        if (pill) pill.textContent = "♪ Trilha Pronta";
-        showScreen("screen-home");
-      }
-
-      function toggleSound() {
-        const next = !SoundFX.isEnabled();
-        SoundFX.setEnabled(next);
-        const icon = document.getElementById("sound-icon");
-        const label = document.getElementById("sound-label");
-        if (icon) icon.textContent = next ? "🔊" : "🔇";
-        if (label) label.textContent = next ? "Som: Ligado" : "Som: Mudo";
-        if (next) SoundFX.click();
-      }
-
-      function shuffleArray(arr) {
-        const copy = [...arr];
-        for (let i = copy.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [copy[i], copy[j]] = [copy[j], copy[i]];
-        }
-        return copy;
-      }
-
-      function buildQuestionDeck() {
-        const category =
-          document.getElementById("category-filter")?.value || "all";
-        const lengthVal =
-          document.getElementById("session-length")?.value || "all";
-        const filtered =
-          category === "all"
-            ? [...CASOS_PYTHON_WEB]
-            : CASOS_PYTHON_WEB.filter((q) => q.category === category);
-        const base = filtered.length ? filtered : [...CASOS_PYTHON_WEB];
-        const shuffled = shuffleArray(base);
-        if (lengthVal === "all") return shuffled;
-        const limit = Math.max(
-          1,
-          Math.min(shuffled.length, Number(lengthVal) || shuffled.length),
-        );
-        return shuffled.slice(0, limit);
-      }
-
-      const CASOS_PYTHON_WEB = CASES;
-
-      function openCreateRoomView() {
-        SoundFX.click();
-        currentMode = "room";
-        currentRoomPin = String(Math.floor(100000 + Math.random() * 900000));
-        document.getElementById("room-modal-title").textContent =
-          "Criar Sala por PIN";
-        document.getElementById("create-room-panel").classList.remove("hidden");
-        document.getElementById("join-room-panel").classList.add("hidden");
-        document.getElementById("generated-pin-display").textContent =
-          currentRoomPin;
-        showScreen("screen-join");
-      }
-
-      function openJoinRoomView() {
-        SoundFX.click();
-        currentMode = "room";
-        document.getElementById("room-modal-title").textContent =
-          "Entrar com PIN";
-        document.getElementById("create-room-panel").classList.add("hidden");
-        document.getElementById("join-room-panel").classList.remove("hidden");
-        showScreen("screen-join");
-      }
-
-      function copyRoomPin() {
-        if (!currentRoomPin) return;
-        try {
-          if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(currentRoomPin).catch(() => {});
-          }
-        } catch (_) {}
-        showToast(`PIN ${currentRoomPin} pronto para compartilhar.`);
-      }
-
-      function startRoomGame() {
-        const joinPanel = document.getElementById("join-room-panel");
-        if (joinPanel && !joinPanel.classList.contains("hidden")) {
-          const typedPin = (
-            document.getElementById("room-pin-input")?.value || ""
-          )
-            .trim()
-            .toUpperCase();
-          if (!typedPin) {
-            showToast("Digite um PIN para entrar na sala.");
-            return;
-          }
-          currentRoomPin = typedPin;
-        }
-        hideToast();
-        beginMatch("room");
-      }
-
-      function startSoloGame() {
-        hideToast();
-        currentRoomPin = "";
-        beginMatch("solo");
-      }
-
-      function replayCurrentMode() {
-        beginMatch(currentMode);
-      }
-
-      function beginMatch(mode) {
-        currentMode = mode;
-        SoundFX.ensureCtx();
-        SoundFX.click();
-
-        gameState = {
-          questions: buildQuestionDeck(),
-          currentIndex: 0,
-          score: 0,
-          correctCount: 0,
-          streak: 0,
-          maxStreak: 0,
-          timeLeft: 25,
-          hintUsed: false,
-          answered: false,
-          currentCorrectIdx: 0,
+        let currentMode = "solo";
+        let currentRoomPin = "";
+        let timerInterval = null;
+        let gameState = {
+            questions: [],
+            currentIndex: 0,
+            score: 0,
+            correctCount: 0,
+            streak: 0,
+            maxStreak: 0,
+            timeLeft: 25,
+            hintUsed: false,
+            answered: false,
+            currentCorrectIdx: 0
         };
 
-        const nameVal =
-          (
-            document.getElementById("player-name")?.value || "Jogador Py"
-          ).trim() || "Jogador Py";
-        document.getElementById("hud-name").textContent = nameVal;
-        document.getElementById("hud-mode-badge").textContent =
-          mode === "room" ? `SALA ${currentRoomPin || ""}` : "SOLO";
-        document.getElementById("hud-q-total").textContent = String(
-          gameState.questions.length,
-        );
-        renderAllAvatars();
-
-        showScreen("screen-game");
-        loadQuestion();
-      }
-
-      function renderDataSample(rows) {
-        const wrap = document.getElementById("q-data-wrap");
-        const table = document.getElementById("q-data-table");
-        if (!rows || !rows.length) {
-          wrap.classList.add("hidden");
-          table.innerHTML = "";
-          return;
-        }
-        const cols = Object.keys(rows[0]);
-        const thead = `<thead><tr class="text-indigo-300 border-b border-slate-800">${cols.map((c) => `<th class="py-1 pr-3">${escapeHtml(c)}</th>`).join("")}</tr></thead>`;
-        const tbody = `<tbody>${rows.map((r) => `<tr class="border-b border-slate-900/80 text-slate-200">${cols.map((c) => `<td class="py-1 pr-3">${escapeHtml(String(r[c] ?? ""))}</td>`).join("")}</tr>`).join("")}</tbody>`;
-        table.innerHTML = thead + tbody;
-        wrap.classList.remove("hidden");
-      }
-
-      function escapeHtml(str) {
-        return String(str)
-          .replaceAll("&", "&amp;")
-          .replaceAll("<", "&lt;")
-          .replaceAll(">", "&gt;")
-          .replaceAll('"', "&quot;");
-      }
-
-      function loadQuestion() {
-        const q = gameState.questions[gameState.currentIndex];
-        if (!q) {
-          finishGame();
-          return;
+        function showToast(msg) {
+            const box = document.getElementById("toast-box");
+            const txt = document.getElementById("toast-text");
+            if (!box || !txt) return;
+            txt.textContent = msg;
+            box.classList.remove("hidden");
         }
 
-        gameState.answered = false;
-        gameState.hintUsed = false;
-        gameState.timeLeft = 25;
+        function hideToast() {
+            const box = document.getElementById("toast-box");
+            if (box) box.classList.add("hidden");
+        }
 
-        const total = gameState.questions.length;
-        document.getElementById("hud-q-num").textContent = String(
-          gameState.currentIndex + 1,
-        );
-        document.getElementById("hud-score").textContent = String(
-          gameState.score,
-        );
-        document.getElementById("hud-streak").textContent =
-          `${gameState.streak}x`;
-        document.getElementById("hud-timer").textContent =
-          `${gameState.timeLeft}s`;
-        document.getElementById("hud-progress-bar").style.width =
-          `${Math.round(((gameState.currentIndex + 1) / total) * 100)}%`;
+        function showScreen(screenId) {
+            ["screen-home", "screen-join", "screen-game", "screen-result"].forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.classList.toggle("hidden", id !== screenId);
+                }
+            });
+            const homeBtn = document.getElementById("btn-home");
+            if (homeBtn) {
+                homeBtn.classList.toggle("hidden", screenId === "screen-home");
+            }
+            if (screenId !== "screen-game" && timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+        }
 
-        document.getElementById("q-topic-pill").textContent =
-          `${q.topic} • ${q.character}`;
-        document.getElementById("q-title").textContent = q.title;
-        document.getElementById("q-story").textContent = q.story;
-        document.getElementById("q-code").textContent = q.code;
+        function returnHome() {
+            SoundFX.click();
+            SoundFX.stopMusic();
+            const pill = document.getElementById("now-playing-pill");
+            if (pill) pill.textContent = "♪ Trilha Pronta";
+            showScreen("screen-home");
+        }
 
-        const sceneInfo = buildCaseIllustration(q.scene, q.id);
-        document.getElementById("q-illustration-svg").innerHTML = sceneInfo.svg;
-        document.getElementById("q-illustration-tag").textContent =
-          sceneInfo.tag;
-        document.getElementById("q-illustration-caption").textContent =
-          sceneInfo.caption;
+        function toggleSound() {
+            const next = !SoundFX.isEnabled();
+            SoundFX.setEnabled(next);
+            const icon = document.getElementById("sound-icon");
+            const label = document.getElementById("sound-label");
+            if (icon) icon.textContent = next ? "🔊" : "🔇";
+            if (label) label.textContent = next ? "Som: Ligado" : "Som: Mudo";
+            if (next) SoundFX.click();
+        }
 
-        renderDataSample(q.data);
+        function shuffleArray(arr) {
+            const copy = [...arr];
+            for (let i = copy.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [copy[i], copy[j]] = [copy[j], copy[i]];
+            }
+            return copy;
+        }
 
-        const hintBox = document.getElementById("q-hint-box");
-        const hintBtn = document.getElementById("btn-hint");
-        hintBox.classList.add("hidden");
-        hintBox.textContent = "";
-        hintBtn.disabled = false;
-        hintBtn.classList.remove("opacity-50", "cursor-not-allowed");
+        function buildQuestionDeck() {
+            const category = document.getElementById("category-filter")?.value || "all";
+            const lengthVal = document.getElementById("session-length")?.value || "all";
+            const filtered = category === "all"
+                ? [...CASOS_PYTHON_WEB]
+                : CASOS_PYTHON_WEB.filter((q) => q.category === category);
+            const base = filtered.length ? filtered : [...CASOS_PYTHON_WEB];
+            const shuffled = shuffleArray(base);
+            if (lengthVal === "all") return shuffled;
+            const limit = Math.max(1, Math.min(shuffled.length, Number(lengthVal) || shuffled.length));
+            return shuffled.slice(0, limit);
+        }
 
-        const feedbackBox = document.getElementById("q-feedback");
-        feedbackBox.classList.add("hidden");
+        const CASOS_PYTHON_WEB = CASES;
 
-        const correctText = q.options[q.correct];
-        const shuffledOptions = shuffleArray(q.options);
-        gameState.currentCorrectIdx = shuffledOptions.indexOf(correctText);
+        async function openCreateRoomView() {
+            SoundFX.click();
+            currentMode = "room";
+            currentRoomPin = String(Math.floor(100000 + Math.random() * 900000));
+            document.getElementById("room-modal-title").textContent = "Criar Sala por PIN";
+            document.getElementById("create-room-panel").classList.remove("hidden");
+            document.getElementById("join-room-panel").classList.add("hidden");
+            document.getElementById("generated-pin-display").textContent = currentRoomPin;
+            showScreen("screen-join");
+            await subscribeToRoomPin(currentRoomPin);
+            await upsertPlayerInRoom(currentRoomPin, { status: "waiting", score: 0, correct: 0, streak: 0, current_question: 0 });
+        }
 
-        const optionsEl = document.getElementById("q-options");
-        optionsEl.innerHTML = shuffledOptions
-          .map(
-            (opt, idx) => `
+        async function openJoinRoomView() {
+            SoundFX.click();
+            currentMode = "room";
+            document.getElementById("room-modal-title").textContent = "Entrar com PIN";
+            document.getElementById("create-room-panel").classList.add("hidden");
+            document.getElementById("join-room-panel").classList.remove("hidden");
+            showScreen("screen-join");
+        }
+
+        function copyRoomPin() {
+            if (!currentRoomPin) return;
+            try {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(currentRoomPin).catch(() => {});
+                }
+            } catch (_) {}
+            showToast(`PIN ${currentRoomPin} copiado! Envie para quem vai jogar com você.`);
+        }
+
+        async function startRoomGame() {
+            const joinPanel = document.getElementById("join-room-panel");
+            if (joinPanel && !joinPanel.classList.contains("hidden")) {
+                const typedPin = (document.getElementById("room-pin-input")?.value || "").trim().toUpperCase();
+                if (!typedPin) {
+                    showToast("Digite um PIN para entrar na sala.");
+                    return;
+                }
+                currentRoomPin = typedPin;
+                await subscribeToRoomPin(currentRoomPin);
+            }
+            hideToast();
+            await beginMatch("room");
+        }
+
+        async function startSoloGame() {
+            hideToast();
+            currentRoomPin = "";
+            await beginMatch("solo");
+        }
+
+        async function replayCurrentMode() {
+            await beginMatch(currentMode);
+        }
+
+        async function beginMatch(mode) {
+            currentMode = mode;
+            SoundFX.ensureCtx();
+            SoundFX.click();
+
+            gameState = {
+                questions: buildQuestionDeck(),
+                currentIndex: 0,
+                score: 0,
+                correctCount: 0,
+                streak: 0,
+                maxStreak: 0,
+                timeLeft: 25,
+                hintUsed: false,
+                answered: false,
+                currentCorrectIdx: 0
+            };
+
+            const nameVal = (document.getElementById("player-name")?.value || "Jogador Py").trim() || "Jogador Py";
+            document.getElementById("hud-name").textContent = nameVal;
+            document.getElementById("hud-mode-badge").textContent = mode === "room" ? `SALA ${currentRoomPin || ""}` : "SOLO";
+            document.getElementById("hud-q-total").textContent = String(gameState.questions.length);
+            renderAllAvatars();
+
+            if (mode === "room" && currentRoomPin) {
+                await subscribeToRoomPin(currentRoomPin);
+                await upsertPlayerInRoom(currentRoomPin, {
+                    status: "playing",
+                    score: 0,
+                    correct: 0,
+                    streak: 0,
+                    current_question: 0
+                });
+            } else {
+                renderRoomPlayersUI(null);
+            }
+
+            showScreen("screen-game");
+            loadQuestion();
+        }
+
+        function renderDataSample(rows) {
+            const wrap = document.getElementById("q-data-wrap");
+            const table = document.getElementById("q-data-table");
+            if (!rows || !rows.length) {
+                wrap.classList.add("hidden");
+                table.innerHTML = "";
+                return;
+            }
+            const cols = Object.keys(rows[0]);
+            const thead = `<thead><tr class="text-indigo-300 border-b border-slate-800">${cols.map((c) => `<th class="py-1 pr-3">${escapeHtml(c)}</th>`).join("")}</tr></thead>`;
+            const tbody = `<tbody>${rows.map((r) => `<tr class="border-b border-slate-900/80 text-slate-200">${cols.map((c) => `<td class="py-1 pr-3">${escapeHtml(String(r[c] ?? ""))}</td>`).join("")}</tr>`).join("")}</tbody>`;
+            table.innerHTML = thead + tbody;
+            wrap.classList.remove("hidden");
+        }
+
+        function escapeHtml(str) {
+            return String(str)
+                .replaceAll("&", "&amp;")
+                .replaceAll("<", "&lt;")
+                .replaceAll(">", "&gt;")
+                .replaceAll("\"", "&quot;");
+        }
+
+        function loadQuestion() {
+            const q = gameState.questions[gameState.currentIndex];
+            if (!q) {
+                finishGame();
+                return;
+            }
+
+            gameState.answered = false;
+            gameState.hintUsed = false;
+            gameState.timeLeft = 25;
+
+            const total = gameState.questions.length;
+            document.getElementById("hud-q-num").textContent = String(gameState.currentIndex + 1);
+            document.getElementById("hud-score").textContent = String(gameState.score);
+            document.getElementById("hud-streak").textContent = `${gameState.streak}x`;
+            document.getElementById("hud-timer").textContent = `${gameState.timeLeft}s`;
+            document.getElementById("hud-progress-bar").style.width = `${Math.round(((gameState.currentIndex + 1) / total) * 100)}%`;
+
+            document.getElementById("q-topic-pill").textContent = `${q.topic} • ${q.character}`;
+            document.getElementById("q-title").textContent = q.title;
+            document.getElementById("q-story").textContent = q.story;
+            document.getElementById("q-code").textContent = q.code;
+
+            const sceneInfo = buildCaseIllustration(q.scene, q.id);
+            document.getElementById("q-illustration-svg").innerHTML = sceneInfo.svg;
+            document.getElementById("q-illustration-tag").textContent = sceneInfo.tag;
+            document.getElementById("q-illustration-caption").textContent = sceneInfo.caption;
+
+            renderDataSample(q.data);
+
+            const hintBox = document.getElementById("q-hint-box");
+            const hintBtn = document.getElementById("btn-hint");
+            hintBox.classList.add("hidden");
+            hintBox.textContent = "";
+            hintBtn.disabled = false;
+            hintBtn.classList.remove("opacity-50", "cursor-not-allowed");
+
+            const feedbackBox = document.getElementById("q-feedback");
+            feedbackBox.classList.add("hidden");
+
+            const correctText = q.options[q.correct];
+            const shuffledOptions = shuffleArray(q.options);
+            gameState.currentCorrectIdx = shuffledOptions.indexOf(correctText);
+
+            const optionsEl = document.getElementById("q-options");
+            optionsEl.innerHTML = shuffledOptions.map((opt, idx) => `
                 <button type="button" onclick="selectAnswer(${idx})" class="ans-btn w-full p-4 sm:p-5 rounded-2xl border font-mono text-lg sm:text-xl font-bold flex items-center gap-3.5 text-left ${OPTION_STYLES[idx % OPTION_STYLES.length]}">
                     <span class="w-9 h-9 rounded-xl bg-black/25 flex items-center justify-center text-sm sm:text-base font-black shrink-0">[${OPTION_LABELS[idx % OPTION_LABELS.length]}]</span>
                     <span class="break-all">${escapeHtml(opt)}</span>
                 </button>
-            `,
-          )
-          .join("");
+            `).join("");
 
-        SoundFX.playCaseMusic(q, gameState.currentIndex);
+            SoundFX.playCaseMusic(q, gameState.currentIndex);
 
-        if (timerInterval) clearInterval(timerInterval);
-        timerInterval = setInterval(() => {
-          if (gameState.answered) return;
-          gameState.timeLeft -= 1;
-          const timerEl = document.getElementById("hud-timer");
-          if (timerEl) {
-            timerEl.textContent = `${Math.max(0, gameState.timeLeft)}s`;
-            timerEl.classList.toggle("text-rose-400", gameState.timeLeft <= 6);
-            timerEl.classList.toggle(
-              "text-emerald-400",
-              gameState.timeLeft > 6,
-            );
-          }
-          if (gameState.timeLeft <= 0) {
-            selectAnswer(-1);
-          }
-        }, 1000);
-      }
-
-      function useHint() {
-        if (gameState.answered || gameState.hintUsed) return;
-        const q = gameState.questions[gameState.currentIndex];
-        if (!q) return;
-
-        gameState.hintUsed = true;
-        gameState.score = Math.max(0, gameState.score - 100);
-        document.getElementById("hud-score").textContent = String(
-          gameState.score,
-        );
-
-        const hintBox = document.getElementById("q-hint-box");
-        hintBox.textContent = `💡 Dica: ${q.hint}`;
-        hintBox.classList.remove("hidden");
-
-        const hintBtn = document.getElementById("btn-hint");
-        hintBtn.disabled = true;
-        hintBtn.classList.add("opacity-50", "cursor-not-allowed");
-        SoundFX.hint();
-      }
-
-      function selectAnswer(chosenIdx) {
-        if (gameState.answered) return;
-        gameState.answered = true;
-        if (timerInterval) {
-          clearInterval(timerInterval);
-          timerInterval = null;
+            if (timerInterval) clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                if (gameState.answered) return;
+                gameState.timeLeft -= 1;
+                const timerEl = document.getElementById("hud-timer");
+                if (timerEl) {
+                    timerEl.textContent = `${Math.max(0, gameState.timeLeft)}s`;
+                    timerEl.classList.toggle("text-rose-400", gameState.timeLeft <= 6);
+                    timerEl.classList.toggle("text-emerald-400", gameState.timeLeft > 6);
+                }
+                if (gameState.timeLeft <= 0) {
+                    selectAnswer(-1);
+                }
+            }, 1000);
         }
 
-        const q = gameState.questions[gameState.currentIndex];
-        const buttons = Array.from(
-          document.querySelectorAll("#q-options .ans-btn"),
-        );
-        buttons.forEach((btn, idx) => {
-          btn.disabled = true;
-          if (idx === gameState.currentCorrectIdx) {
-            btn.classList.add("ring-4", "ring-emerald-300");
-          } else if (idx === chosenIdx) {
-            btn.classList.add("opacity-60");
-          } else {
-            btn.classList.add("opacity-45");
-          }
-        });
+        function useHint() {
+            if (gameState.answered || gameState.hintUsed) return;
+            const q = gameState.questions[gameState.currentIndex];
+            if (!q) return;
 
-        const feedbackBox = document.getElementById("q-feedback");
-        const badge = document.getElementById("fb-badge");
-        const pointsEl = document.getElementById("fb-points");
-        const expEl = document.getElementById("fb-explanation");
+            gameState.hintUsed = true;
+            gameState.score = Math.max(0, gameState.score - 100);
+            document.getElementById("hud-score").textContent = String(gameState.score);
 
-        feedbackBox.classList.remove(
-          "hidden",
-          "bg-emerald-950/80",
-          "border-emerald-400/40",
-          "bg-rose-950/80",
-          "border-rose-400/40",
-        );
+            const hintBox = document.getElementById("q-hint-box");
+            hintBox.textContent = `💡 Dica: ${q.hint}`;
+            hintBox.classList.remove("hidden");
 
-        const isCorrect = chosenIdx === gameState.currentCorrectIdx;
-        if (isCorrect) {
-          gameState.correctCount += 1;
-          gameState.streak += 1;
-          gameState.maxStreak = Math.max(gameState.maxStreak, gameState.streak);
-          const gained =
-            500 +
-            Math.max(0, gameState.timeLeft) * 20 +
-            (gameState.streak - 1) * 100;
-          gameState.score += gained;
+            const hintBtn = document.getElementById("btn-hint");
+            hintBtn.disabled = true;
+            hintBtn.classList.add("opacity-50", "cursor-not-allowed");
+            SoundFX.hint();
 
-          feedbackBox.classList.add(
-            "bg-emerald-950/80",
-            "border-emerald-400/40",
-          );
-          badge.textContent = "✓ Mandou Bem!";
-          badge.className = "font-black text-sm sm:text-base text-emerald-300";
-          pointsEl.textContent = `+${gained} pts`;
-          pointsEl.className =
-            "font-mono text-xs sm:text-sm font-extrabold text-emerald-300";
-          SoundFX.correct();
-        } else {
-          gameState.streak = 0;
-          feedbackBox.classList.add("bg-rose-950/80", "border-rose-400/40");
-          badge.textContent =
-            chosenIdx === -1 ? "✕ Tempo Esgotado!" : "✕ Não Foi Desta Vez";
-          badge.className = "font-black text-sm sm:text-base text-rose-300";
-          pointsEl.textContent = "+0 pts";
-          pointsEl.className =
-            "font-mono text-xs sm:text-sm font-extrabold text-rose-300";
-          SoundFX.wrong();
+            if (currentMode === "room" && currentRoomPin) {
+                upsertPlayerInRoom(currentRoomPin, {
+                    score: gameState.score,
+                    correct: gameState.correctCount,
+                    streak: gameState.streak,
+                    current_question: gameState.currentIndex
+                });
+            }
         }
 
-        expEl.textContent = q.explanation;
-        document.getElementById("hud-score").textContent = String(
-          gameState.score,
-        );
-        document.getElementById("hud-streak").textContent =
-          `${gameState.streak}x`;
-      }
+        function selectAnswer(chosenIdx) {
+            if (gameState.answered) return;
+            gameState.answered = true;
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
 
-      function nextQuestion() {
-        if (!gameState.answered) return;
-        SoundFX.click();
-        gameState.currentIndex += 1;
-        if (gameState.currentIndex >= gameState.questions.length) {
-          finishGame();
-        } else {
-          loadQuestion();
+            const q = gameState.questions[gameState.currentIndex];
+            const buttons = Array.from(document.querySelectorAll("#q-options .ans-btn"));
+            buttons.forEach((btn, idx) => {
+                btn.disabled = true;
+                if (idx === gameState.currentCorrectIdx) {
+                    btn.classList.add("ring-4", "ring-emerald-300");
+                } else if (idx === chosenIdx) {
+                    btn.classList.add("opacity-60");
+                } else {
+                    btn.classList.add("opacity-45");
+                }
+            });
+
+            const feedbackBox = document.getElementById("q-feedback");
+            const badge = document.getElementById("fb-badge");
+            const pointsEl = document.getElementById("fb-points");
+            const expEl = document.getElementById("fb-explanation");
+
+            feedbackBox.classList.remove("hidden", "bg-emerald-950/80", "border-emerald-400/40", "bg-rose-950/80", "border-rose-400/40");
+
+            const isCorrect = chosenIdx === gameState.currentCorrectIdx;
+            if (isCorrect) {
+                gameState.correctCount += 1;
+                gameState.streak += 1;
+                gameState.maxStreak = Math.max(gameState.maxStreak, gameState.streak);
+                const gained = 500 + Math.max(0, gameState.timeLeft) * 20 + (gameState.streak - 1) * 100;
+                gameState.score += gained;
+
+                feedbackBox.classList.add("bg-emerald-950/80", "border-emerald-400/40");
+                badge.textContent = "✓ Mandou Bem!";
+                badge.className = "font-black text-sm sm:text-base text-emerald-300";
+                pointsEl.textContent = `+${gained} pts`;
+                pointsEl.className = "font-mono text-xs sm:text-sm font-extrabold text-emerald-300";
+                SoundFX.correct();
+            } else {
+                gameState.streak = 0;
+                feedbackBox.classList.add("bg-rose-950/80", "border-rose-400/40");
+                badge.textContent = chosenIdx === -1 ? "✕ Tempo Esgotado!" : "✕ Não Foi Desta Vez";
+                badge.className = "font-black text-sm sm:text-base text-rose-300";
+                pointsEl.textContent = "+0 pts";
+                pointsEl.className = "font-mono text-xs sm:text-sm font-extrabold text-rose-300";
+                SoundFX.wrong();
+            }
+
+            expEl.textContent = q.explanation;
+            document.getElementById("hud-score").textContent = String(gameState.score);
+            document.getElementById("hud-streak").textContent = `${gameState.streak}x`;
+
+            if (currentMode === "room" && currentRoomPin) {
+                upsertPlayerInRoom(currentRoomPin, {
+                    score: gameState.score,
+                    correct: gameState.correctCount,
+                    streak: gameState.streak,
+                    current_question: gameState.currentIndex + 1
+                });
+            }
         }
-      }
 
-      function saveLeaderboardEntry(name, score) {
-        let list = [];
-        try {
-          list = JSON.parse(localStorage.getItem(LEADERBOARD_KEY) || "[]");
-          if (!Array.isArray(list)) list = [];
-        } catch (_) {
-          list = [];
+        function nextQuestion() {
+            if (!gameState.answered) return;
+            SoundFX.click();
+            gameState.currentIndex += 1;
+            if (gameState.currentIndex >= gameState.questions.length) {
+                finishGame();
+            } else {
+                loadQuestion();
+            }
         }
-        list.push({ name, score, at: Date.now() });
-        list.sort((a, b) => (b.score || 0) - (a.score || 0));
-        list = list.slice(0, 5);
-        try {
-          localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(list));
-        } catch (_) {}
-        return list;
-      }
 
-      function finishGame() {
-        if (timerInterval) {
-          clearInterval(timerInterval);
-          timerInterval = null;
+        function saveLeaderboardEntry(name, score) {
+            let list = [];
+            try {
+                list = JSON.parse(localStorage.getItem(LEADERBOARD_KEY) || "[]");
+                if (!Array.isArray(list)) list = [];
+            } catch (_) {
+                list = [];
+            }
+            list.push({ name, score, at: Date.now() });
+            list.sort((a, b) => (b.score || 0) - (a.score || 0));
+            list = list.slice(0, 5);
+            try {
+                localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(list));
+            } catch (_) {}
+            return list;
         }
-        SoundFX.stopMusic();
-        SoundFX.finish();
 
-        const nameVal =
-          (
-            document.getElementById("player-name")?.value || "Jogador Py"
-          ).trim() || "Jogador Py";
-        const total = gameState.questions.length || 1;
-        const accuracy = Math.round((gameState.correctCount / total) * 100);
+        async function finishGame() {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+            SoundFX.stopMusic();
+            SoundFX.finish();
 
-        document.getElementById("result-player-title").textContent = nameVal;
-        document.getElementById("result-rank-badge").textContent =
-          accuracy >= 85
-            ? "★ Mestre Python & Dados"
-            : accuracy >= 60
-              ? "◆ Desenvolvedor em Ascensão"
-              : "● Cadete em Treinamento";
-        document.getElementById("result-score").textContent = String(
-          gameState.score,
-        );
-        document.getElementById("result-correct").textContent =
-          `${gameState.correctCount}/${total}`;
-        document.getElementById("result-streak").textContent =
-          `${gameState.maxStreak}x`;
+            const nameVal = (document.getElementById("player-name")?.value || "Jogador Py").trim() || "Jogador Py";
+            const total = gameState.questions.length || 1;
+            const accuracy = Math.round((gameState.correctCount / total) * 100);
 
-        const entries = saveLeaderboardEntry(nameVal, gameState.score);
-        document.getElementById("leaderboard-rows").innerHTML = entries
-          .map(
-            (entry, idx) => `
-                <div class="flex items-center justify-between px-3 py-2 rounded-xl bg-slate-950/80 border border-slate-800/80">
-                    <span class="font-bold">#${idx + 1} ${escapeHtml(entry.name)}</span>
-                    <span class="font-mono font-extrabold text-indigo-300">${entry.score || 0} pts</span>
-                </div>
-            `,
-          )
-          .join("");
+            document.getElementById("result-player-title").textContent = nameVal;
+            document.getElementById("result-rank-badge").textContent =
+                accuracy >= 85 ? "★ Mestre Python & Dados" :
+                accuracy >= 60 ? "◆ Desenvolvedor em Ascensão" :
+                "● Cadete em Treinamento";
+            document.getElementById("result-score").textContent = String(gameState.score);
+            document.getElementById("result-correct").textContent = `${gameState.correctCount}/${total}`;
+            document.getElementById("result-streak").textContent = `${gameState.maxStreak}x`;
 
-        renderAllAvatars();
-        showScreen("screen-result");
-      }
+            if (currentMode === "room" && currentRoomPin) {
+                await upsertPlayerInRoom(currentRoomPin, {
+                    status: "finished",
+                    score: gameState.score,
+                    correct: gameState.correctCount,
+                    streak: gameState.maxStreak,
+                    current_question: total
+                });
+                const roomPlayers = Array.isArray(currentRoomData?.players) ? [...currentRoomData.players] : [];
+                roomPlayers.sort((a, b) => (b.score || 0) - (a.score || 0));
+                document.getElementById("leaderboard-title").textContent = `Placar da Sala ${currentRoomPin} (Supabase)`;
+                document.getElementById("leaderboard-rows").innerHTML = roomPlayers.map((entry, idx) => `
+                    <div class="flex items-center justify-between px-3 py-2 rounded-xl bg-slate-950/80 border border-slate-800/80">
+                        <span class="font-bold">#${idx + 1} ${escapeHtml(entry.name || "Jogador")}</span>
+                        <span class="font-mono font-extrabold text-emerald-300">${entry.score || 0} pts</span>
+                    </div>
+                `).join("");
+            } else {
+                const entries = saveLeaderboardEntry(nameVal, gameState.score);
+                document.getElementById("leaderboard-title").textContent = "Placar Local";
+                document.getElementById("leaderboard-rows").innerHTML = entries.map((entry, idx) => `
+                    <div class="flex items-center justify-between px-3 py-2 rounded-xl bg-slate-950/80 border border-slate-800/80">
+                        <span class="font-bold">#${idx + 1} ${escapeHtml(entry.name)}</span>
+                        <span class="font-mono font-extrabold text-indigo-300">${entry.score || 0} pts</span>
+                    </div>
+                `).join("");
+            }
 
-      /* =====================================================================
+            renderAllAvatars();
+            showScreen("screen-result");
+        }
+
+        /* =====================================================================
            6. INICIALIZAÇÃO E ATALHOS DE TECLADO
            ===================================================================== */
-      window.addEventListener("DOMContentLoaded", () => {
-        loadUserAvatar();
-        document.addEventListener("pointerdown", () => SoundFX.ensureCtx(), {
-          once: false,
-        });
-        document.addEventListener("keydown", (e) => {
-          const gameVisible = !document
-            .getElementById("screen-game")
-            ?.classList.contains("hidden");
-          if (!gameVisible) return;
+        window.addEventListener("DOMContentLoaded", () => {
+            loadUserAvatar();
+            initSupabaseClient();
+            document.addEventListener("pointerdown", () => SoundFX.ensureCtx(), { once: false });
+            document.addEventListener("keydown", (e) => {
+                const gameVisible = !document.getElementById("screen-game")?.classList.contains("hidden");
+                if (!gameVisible) return;
 
-          if (!gameState.answered) {
-            if (["1", "2", "3", "4"].includes(e.key)) {
-              selectAnswer(Number(e.key) - 1);
-            } else if (e.key.toLowerCase() === "h") {
-              useHint();
-            }
-          } else if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            nextQuestion();
-          }
+                if (!gameState.answered) {
+                    if (["1", "2", "3", "4"].includes(e.key)) {
+                        selectAnswer(Number(e.key) - 1);
+                    } else if (e.key.toLowerCase() === "h") {
+                        useHint();
+                    }
+                } else if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    nextQuestion();
+                }
+            });
         });
-      });
     </script>
-  </body>
+</body>
 </html>
