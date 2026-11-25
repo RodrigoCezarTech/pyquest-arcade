@@ -986,7 +986,7 @@
             const normalizedRoom = {
                 ...room,
                 pin: cleanPin,
-                status: room.status === "playing" || currentRoomData?.status === "playing" ? "playing" : (room.status || "waiting"),
+                status: room.status || currentRoomData?.status || "waiting",
                 host_name: room.host_name || currentRoomData?.host_name || "Host",
                 players: Array.from(mergedMap.values()),
                 current_question: Number(room.current_question || 0),
@@ -1001,6 +1001,14 @@
 
             const joinVisible = !document.getElementById("screen-join")?.classList.contains("hidden");
             const gameVisible = !document.getElementById("screen-game")?.classList.contains("hidden");
+
+            // Quando o anfitrião encerra a última missão, todos os participantes
+            // recebem status="finished" e também abrem a tela de resultado.
+            if (normalizedRoom.status === "finished") {
+                if (gameState && !gameState.finished) finishGame();
+                return;
+            }
+
             if (joinVisible && normalizedRoom.status === "playing" && !gameVisible) {
                 beginRoomGameplay(normalizedRoom);
             } else if (gameVisible && normalizedRoom.status === "playing" && Array.isArray(normalizedRoom.questions) && normalizedRoom.questions.length && gameState && Number(normalizedRoom.current_question) !== Number(gameState.index)) {
