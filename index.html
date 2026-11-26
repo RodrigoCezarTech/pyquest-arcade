@@ -1351,6 +1351,23 @@
             return pool;
         }
 
+        function assignMusicTracks(deck) {
+            if (!Array.isArray(deck)) return deck;
+            let order = Array.from({ length: BACKGROUND_TRACKS.length }, (_, i) => i);
+            for (let i = order.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [order[i], order[j]] = [order[j], order[i]];
+            }
+            let last = -1;
+            deck.forEach((item, index) => {
+                let track = order[index % order.length];
+                if (track === last) track = (track + 1 + Math.floor(Math.random() * (order.length - 1))) % order.length;
+                item._musicTrack = track;
+                last = track;
+            });
+            return deck;
+        }
+
         function beginRoomGameplay(room) {
             const cleanPin = normalizePin(room?.pin || currentRoomPin);
             currentMode = "room";
@@ -1395,6 +1412,7 @@
                 return;
             }
             const deck = buildDeckFromSettings();
+            assignMusicTracks(deck);
             const { data: startResult, error: startError } = await client.rpc("pyquest_start_game", {
                 p_room_pin: activePin,
                 p_host_player_id: getLocalPlayerId(),
@@ -1420,6 +1438,7 @@
             if (userAvatar) userAvatar.name = playerName;
 
             const deck = buildDeckFromSettings();
+            assignMusicTracks(deck);
             gameState = {
                 playerName,
                 deck,
@@ -1495,17 +1514,24 @@
             if (box) box.classList.add("hidden");
         }
 
+        const AUDIO_BASE = "assets/audio/";
+        const BACKGROUND_TRACKS = [
+            { name: "Retro Arcade", file: "mfcc-retro-arcade-game-music-297305.mp3" },
+            { name: "Minecraft Gaming", file: "hitslab-gaming-game-minecraft-background-music-278382.mp3" },
+            { name: "Neon Arcade", file: "arpmedia-retro-arcade-game-music-577821.mp3" },
+            { name: "Game Adventure", file: "maksymmalko-roblox-minecraft-fortnite-video-game-music-358426.mp3" },
+            { name: "Game Quest", file: "tatamusic-game-game-music-599001.mp3" },
+            { name: "Pixel Rush", file: "paulyudin-game-game-music-573991.mp3" }
+        ];
+
         const SoundFX = {
             ctx: null,
-            bgmTimer: null,
-            bgmStep: 0,
-            bgmActive: false,
-            tracks: [
-                { name: "Neon Orbit 8-Bit", tempo: 175, notes: [261.63, 329.63, 392.0, 523.25, 392.0, 329.63, 293.66, 392.0, 440.0, 523.25, 440.0, 349.23, 329.63, 392.0, 293.66, 246.94] },
-                { name: "Cyber Lab Groove", tempo: 165, notes: [220.0, 261.63, 329.63, 440.0, 392.0, 329.63, 261.63, 293.66, 349.23, 440.0, 523.25, 440.0, 392.0, 329.63, 293.66, 246.94] },
-                { name: "Dataframe Rush", tempo: 150, notes: [293.66, 349.23, 440.0, 587.33, 523.25, 440.0, 349.23, 329.63, 392.0, 493.88, 587.33, 493.88, 440.0, 392.0, 329.63, 261.63] }
-            ],
-            currentTrackIdx: 0,
+            music: null,
+            thinking: null,
+            ticking: null,
+            currentTrackIdx: -1,
+            currentTrackKey: null,
+            lastTickSecond: null,
             ensureCtx() {
                 if (!soundEnabled) return null;
                 const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -1513,10 +1539,14 @@
                 if (!this.ctx) {
                     try { this.ctx = new AudioCtx(); } catch (_) { return null; }
                 }
-                if (this.ctx && this.ctx.state === "suspended") {
-                    this.ctx.resume().catch(() => {});
-                }
+                if (this.ctx.state === "suspended") this.ctx.resume().catch(() => {});
                 return this.ctx;
+            },
+            getAudio(file, loop = false) {
+                const audio = new Audio(AUDIO_BASE + file);
+                audio.preload = "auto";
+                audio.loop = loop;
+                return audio;
             },
             tone(freq, duration = 0.12, type = "sine", gainVal = 0.05) {
                 const ctx = this.ensureCtx();
@@ -1534,50 +1564,68 @@
                     osc.stop(ctx.currentTime + duration);
                 } catch (_) {}
             },
-            startMusic(trackSeed = 0) {
+            async startMusic(trackIndex) {
                 if (!soundEnabled) return;
-                const ctx = this.ensureCtx();
-                if (!ctx) return;
-                this.currentTrackIdx = Math.abs(Number(trackSeed || 0)) % this.tracks.length;
-                const track = this.tracks[this.currentTrackIdx];
+                const idx = Math.abs(Number(trackIndex) || 0) % BACKGROUND_TRACKS.length;
+                const track = BACKGROUND_TRACKS[idx];
+                if (this.currentTrackIdx === idx && this.music && !this.music.paused) return;
+                if (this.music) { this.music.pause(); this.music.currentTime = 0; }
+                this.currentTrackIdx = idx;
+                this.currentTrackKey = track.file;
+                this.music = this.getAudio(track.file, true);
+                this.music.volume = 0.28;
                 const pill = document.getElementById("now-playing-pill");
-                if (pill) pill.textContent = `♪ ${track.name}`;
-                if (this.bgmTimer) {
-                    clearInterval(this.bgmTimer);
-                    this.bgmTimer = null;
-                }
-                this.bgmActive = true;
-                this.bgmTimer = setInterval(() => {
-                    if (!soundEnabled || !this.bgmActive) return;
-                    const activeCtx = this.ensureCtx();
-                    if (!activeCtx || activeCtx.state !== "running") return;
-                    const t = this.tracks[this.currentTrackIdx];
-                    const note = t.notes[this.bgmStep % t.notes.length];
-                    this.tone(note, 0.14, "triangle", 0.022);
-                    if (this.bgmStep % 4 === 0) {
-                        this.tone(note / 2, 0.18, "sine", 0.03);
-                    }
-                    this.bgmStep += 1;
-                }, track.tempo);
+                if (pill) pill.textContent = "♪ " + track.name;
+                try { await this.music.play(); }
+                catch (err) { console.warn("Aguardando interação para tocar a trilha:", err); }
+            },
+            resumeMusic() {
+                if (!soundEnabled || !this.music) return;
+                this.music.play().catch(() => {});
             },
             stopMusic() {
-                this.bgmActive = false;
-                if (this.bgmTimer) {
-                    clearInterval(this.bgmTimer);
-                    this.bgmTimer = null;
+                if (this.music) this.music.pause();
+                this.stopSpecialSounds();
+            },
+            startThinking() {
+                if (!soundEnabled) return;
+                if (!this.thinking) {
+                    this.thinking = this.getAudio("sonican-thinking-time-219360.mp3", true);
+                    this.thinking.volume = 0.10;
+                }
+                this.thinking.currentTime = 0;
+                this.thinking.play().catch(() => {});
+            },
+            stopThinking() {
+                if (this.thinking) { this.thinking.pause(); this.thinking.currentTime = 0; }
+            },
+            playTick() {
+                if (!soundEnabled) return;
+                if (!this.ticking) {
+                    this.ticking = this.getAudio("sonican-ticking-time-action-countdown-loop-283365.mp3", false);
+                    this.ticking.volume = 0.24;
+                }
+                if (this.ticking.paused) {
+                    this.ticking.currentTime = 0;
+                    this.ticking.play().catch(() => {});
                 }
             },
+            stopSpecialSounds() {
+                this.stopThinking();
+                if (this.ticking) { this.ticking.pause(); this.ticking.currentTime = 0; }
+                this.lastTickSecond = null;
+            },
             correct() {
+                this.stopThinking();
                 this.tone(587.33, 0.1, "triangle", 0.06);
                 setTimeout(() => this.tone(880, 0.16, "triangle", 0.06), 90);
             },
             wrong() {
+                this.stopThinking();
                 this.tone(220, 0.14, "sawtooth", 0.05);
                 setTimeout(() => this.tone(164.81, 0.2, "sawtooth", 0.05), 110);
             },
-            hint() {
-                this.tone(660, 0.12, "sine", 0.05);
-            },
+            hint() { this.tone(660, 0.12, "sine", 0.05); },
             finish() {
                 this.stopMusic();
                 [523.25, 659.25, 783.99, 1046.5].forEach((f, idx) => {
@@ -1594,7 +1642,7 @@
             if (icon) icon.textContent = soundEnabled ? "🔊" : "🔇";
             if (label) label.textContent = soundEnabled ? "Som: Ligado" : "Som: Mudo";
             if (soundEnabled) {
-                SoundFX.startMusic(gameState ? gameState.index : 0);
+                if (gameState) SoundFX.startMusic(gameState.deck[gameState.index]?._musicTrack ?? 0);
             } else {
                 SoundFX.stopMusic();
                 if (pill) pill.textContent = "♪ Som Silenciado";
@@ -1651,6 +1699,10 @@
                     return;
                 }
                 gameState.timeLeft = Math.max(0, Math.ceil((gameState.roundDeadline - Date.now()) / 1000));
+                if (soundEnabled && gameState.timeLeft <= 10 && gameState.timeLeft > 0 && SoundFX.lastTickSecond !== gameState.timeLeft) {
+                    SoundFX.lastTickSecond = gameState.timeLeft;
+                    SoundFX.playTick();
+                }
                 updateHudStats();
                 if (gameState.timeLeft === 0) {
                     clearInterval(timerInterval);
@@ -1741,7 +1793,8 @@
             }
 
             if (soundEnabled) {
-                SoundFX.startMusic(c.id || gameState.index);
+                SoundFX.startMusic(c._musicTrack ?? 0);
+                SoundFX.startThinking();
             }
             updateHudStats();
             startQuestionTimer();
