@@ -1892,6 +1892,7 @@
             }
 
             gameState.answered = true;
+            SoundFX.stopSpecialSounds();
             if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
 
             if (isCorrect) {
