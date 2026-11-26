@@ -1524,7 +1524,7 @@
             { name: "Pixel Rush", file: "paulyudin-game-game-music-573991.mp3" }
         ];
         const SoundFX = {
-            ctx: null, music: null, thinking: null, ticking: null,
+            ctx: null, music: null, thinking: null, ticking: null, victory: null,
             currentTrackIdx: -1, lastTickSecond: null,
             ensureCtx() {
                 if (!soundEnabled) return null;
@@ -1571,7 +1571,24 @@
             },
             stopMusic() {
                 if (this.music) this.music.pause();
+                if (this.victory) { this.victory.pause(); this.victory.currentTime = 0; }
                 this.stopSpecialSounds();
+            },
+            async startVictory() {
+                if (!soundEnabled) return;
+                this.stopMusic();
+                this.victory = this.getAudio("luis_humanoide-majestic-brass-fanfare-293125.mp3");
+                this.victory.volume = 0.42;
+                const pill = document.getElementById("now-playing-pill");
+                if (pill) pill.textContent = "🏆 Trilha da Vitória";
+                try {
+                    await this.victory.play();
+                } catch (err) {
+                    console.warn("O navegador aguardou interação para tocar a fanfarra:", err);
+                    [523.25, 659.25, 783.99, 1046.5].forEach((f, idx) => {
+                        setTimeout(() => this.tone(f, 0.15, "triangle", 0.06), idx * 100);
+                    });
+                }
             },
             startThinking() {
                 if (!soundEnabled) return;
@@ -1613,10 +1630,7 @@
             },
             hint() { this.tone(660, 0.12, "sine", 0.05); },
             finish() {
-                this.stopMusic();
-                [523.25, 659.25, 783.99, 1046.5].forEach((f, idx) => {
-                    setTimeout(() => this.tone(f, 0.15, "triangle", 0.06), idx * 100);
-                });
+                this.startVictory();
             }
         };
 
@@ -1628,7 +1642,12 @@
             if (icon) icon.textContent = soundEnabled ? "🔊" : "🔇";
             if (label) label.textContent = soundEnabled ? "Som: Ligado" : "Som: Mudo";
             if (soundEnabled) {
-                if (gameState) SoundFX.startMusic(gameState.deck[gameState.index]?._musicTrack ?? 0);
+                const resultScreen = document.getElementById("screen-result");
+                if (resultScreen && !resultScreen.classList.contains("hidden")) {
+                    SoundFX.startVictory();
+                } else if (gameState) {
+                    SoundFX.startMusic(gameState.deck[gameState.index]?._musicTrack ?? 0);
+                }
             } else {
                 SoundFX.stopMusic();
                 if (pill) pill.textContent = "♪ Som Silenciado";
