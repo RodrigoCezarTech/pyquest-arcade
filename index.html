@@ -1368,23 +1368,6 @@
             return deck;
         }
 
-        function assignMusicTracks(deck) {
-            if (!Array.isArray(deck)) return deck;
-            let order = Array.from({ length: BACKGROUND_TRACKS.length }, (_, i) => i);
-            for (let i = order.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [order[i], order[j]] = [order[j], order[i]];
-            }
-            let last = -1;
-            deck.forEach((item, index) => {
-                let track = order[index % order.length];
-                if (track === last) track = (track + 1 + Math.floor(Math.random() * (order.length - 1))) % order.length;
-                item._musicTrack = track;
-                last = track;
-            });
-            return deck;
-        }
-
         function beginRoomGameplay(room) {
             const cleanPin = normalizePin(room?.pin || currentRoomPin);
             currentMode = "room";
@@ -1530,16 +1513,6 @@
             const box = document.getElementById("toast-box");
             if (box) box.classList.add("hidden");
         }
-
-        const AUDIO_BASE = "assets/audio/";
-        const BACKGROUND_TRACKS = [
-            { name: "Retro Arcade", file: "mfcc-retro-arcade-game-music-297305.mp3" },
-            { name: "Minecraft Gaming", file: "hitslab-gaming-game-minecraft-background-music-278382.mp3" },
-            { name: "Neon Arcade", file: "arpmedia-retro-arcade-game-music-577821.mp3" },
-            { name: "Game Adventure", file: "maksymmalko-roblox-minecraft-fortnite-video-game-music-358426.mp3" },
-            { name: "Game Quest", file: "tatamusic-game-game-music-599001.mp3" },
-            { name: "Pixel Rush", file: "paulyudin-game-game-music-573991.mp3" }
-        ];
 
         const AUDIO_BASE = "assets/audio/";
         const BACKGROUND_TRACKS = [
